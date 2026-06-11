@@ -9,7 +9,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
       getFirestore, collection, addDoc, setDoc, doc, deleteDoc,
-      onSnapshot, serverTimestamp, getDocs, writeBatch
+      onSnapshot, serverTimestamp, getDocs, writeBatch, query, orderBy
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -40,10 +40,28 @@
         if (!firebaseReady) return false;
         if (unsubscribe) unsubscribe();
 
-        unsubscribe = onSnapshot(collection(db, "bookmarks"), snap => {
+        const ref = collection(db, "bookmarks");
+
+        const handleSnap = snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          console.log("Firestore bookmarks loaded:", data.length, data);
           callback(data);
-        });
+        };
+
+        const handleErr = err => {
+          console.error("Firestore ordered read error. Trying fallback read:", err);
+          unsubscribe = onSnapshot(ref, handleSnap, fallbackErr => {
+            console.error("Firestore fallback read error:", fallbackErr);
+          });
+        };
+
+        try {
+          const q = query(ref, orderBy("position", "asc"));
+          unsubscribe = onSnapshot(q, handleSnap, handleErr);
+        } catch (err) {
+          console.error("Firestore query setup error. Trying fallback read:", err);
+          unsubscribe = onSnapshot(ref, handleSnap, handleErr);
+        }
 
         return true;
       },
@@ -124,8 +142,15 @@
 
       async getAllOnce() {
         if (!firebaseReady) return [];
-        const snap = await getDocs(collection(db, "bookmarks"));
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try {
+          const q = query(collection(db, "bookmarks"), orderBy("position", "asc"));
+          const snap = await getDocs(q);
+          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (err) {
+          console.error("Firestore export fallback:", err);
+          const snap = await getDocs(collection(db, "bookmarks"));
+          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
       }
     };
   </script>
@@ -169,7 +194,7 @@
 
 <body>
   <section id="login" class="login"><div class="login-card"><div class="logo-row"><div class="logo">B</div><h1>Bookmark Vault</h1></div><div class="login-row"><input id="passInput" type="password" placeholder="Passcode" /><button class="primary" onclick="unlock()">Unlock</button></div><div id="loginMsg" class="status"></div></div></section>
-  <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks yet. Tap + to add or import bookmarks.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
+  <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks shown. If Firestore already has data, open Console and check the Firebase read message.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
   <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">AI Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
   <section id="menuModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Menu</h2><button onclick="closeMenu()">Close</button></div><div class="menu-grid"><button onclick="openImport()">Import Chrome / Edge / JSON</button><button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button><button onclick="exportJSON()">Export JSON backup</button><button onclick="downloadFirebaseRules()">Download Firestore Rules</button><button class="warn" onclick="lock()">Lock</button><div class="notice">Firebase collection used: <b>bookmarks</b>. Reordering is saved using the <b>position</b> field.</div></div></div></section>
   <section id="importModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Import bookmarks</h2><button onclick="closeImport()">Close</button></div><div class="grid"><input id="importFile" type="file" accept=".html,.htm,.json" /><div class="choice-title">Import as</div><div class="choice-row"><button id="impAuto" class="choice-btn active" onclick="setImportMode('auto')">Auto</button><button id="impWork" class="choice-btn" onclick="setImportMode('Work')">Work</button><button id="impPersonal" class="choice-btn" onclick="setImportMode('Personal')">Personal</button></div><button class="primary" onclick="importBookmarks()">Import</button><div id="importStatus" class="status"></div><div class="small">Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.</div></div></div></section>
@@ -177,8 +202,54 @@
   <script>
     const PASSCODE="876766",LOCAL_STORE="bookmarkVaultCompactLocalV5";let bookmarks=[],activeCategory="All",activeFolder="All",editingId=null,editCategory="Work",editFolder="",importMode="auto",firebaseConnected=false,draggedId=null;const $=id=>document.getElementById(id);
     function unlock(){if($("passInput").value.trim()!==PASSCODE){$("loginMsg").textContent="Wrong passcode.";return}sessionStorage.setItem("bookmarkVaultUnlocked","1");$("login").classList.add("hidden");$("app").classList.remove("hidden");startApp()}function lock(){sessionStorage.removeItem("bookmarkVaultUnlocked");$("app").classList.add("hidden");$("login").classList.remove("hidden");$("passInput").value="";closeMenu()}$("passInput").addEventListener("keydown",e=>{if(e.key==="Enter")unlock()});
-    function startApp(){firebaseConnected=window.FirebaseBridge&&window.FirebaseBridge.ready();if(firebaseConnected){window.FirebaseBridge.startListening(data=>{bookmarks=data.map(cleanBookmark);normalisePositions(false);saveLocal();render()})}else{loadLocal();normalisePositions(false);render()}}
-    function cleanBookmark(b){return{id:b.id||("local_"+Date.now()+Math.random()),title:b.title||"Untitled",url:b.url||"",category:b.category||"Work",folder:b.folder||"",tags:Array.isArray(b.tags)?b.tags:[],note:b.note||b.desc||"",position:typeof b.position==="number"?b.position:Number.MAX_SAFE_INTEGER,createdAt:b.createdAt||Date.now(),updatedAt:b.updatedAt||Date.now()}}
+    function startApp(){
+      loadLocal();
+      normalisePositions(false);
+      render();
+
+      firebaseConnected = window.FirebaseBridge && window.FirebaseBridge.ready();
+
+      if(firebaseConnected){
+        window.FirebaseBridge.startListening(data => {
+          bookmarks = data.map(cleanBookmark);
+          normalisePositions(true);
+          saveLocal();
+          render();
+
+          if(bookmarks.length === 0){
+            console.warn("Firebase connected, but no documents were returned from collection: bookmarks");
+          }
+        });
+      } else {
+        console.error("FirebaseBridge is not ready. App is using localStorage only.");
+      }
+    }
+    function toMillis(value){
+      if(!value) return 0;
+      if(typeof value === "number") return value;
+      if(value.seconds) return value.seconds * 1000;
+      if(typeof value.toMillis === "function") return value.toMillis();
+      return 0;
+    }
+
+    function cleanBookmark(b){
+      const created = toMillis(b.createdAt) || Date.now();
+      const updated = toMillis(b.updatedAt) || created;
+      const rawPosition = Number(b.position);
+
+      return {
+        id: b.id || ("local_" + Date.now() + Math.random()),
+        title: b.title || b.name || "Untitled",
+        url: b.url || b.href || "",
+        category: b.category === "Personal" ? "Personal" : "Work",
+        folder: String(b.folder || "").trim(),
+        tags: Array.isArray(b.tags) ? b.tags : [],
+        note: b.note || b.desc || b.description || "",
+        position: Number.isFinite(rawPosition) ? rawPosition : Number.MAX_SAFE_INTEGER,
+        createdAt: created,
+        updatedAt: updated
+      };
+    }
     function loadLocal(){try{bookmarks=JSON.parse(localStorage.getItem(LOCAL_STORE)||"[]").map(cleanBookmark)}catch(e){bookmarks=[]}}function saveLocal(){localStorage.setItem(LOCAL_STORE,JSON.stringify(bookmarks))}function normalisePositions(save=true){bookmarks.sort(sortBookmarks);let changed=false;bookmarks.forEach((b,i)=>{if(typeof b.position!=="number"||b.position===Number.MAX_SAFE_INTEGER){b.position=i;changed=true}});if(changed&&save)persistPositions(bookmarks)}function sortBookmarks(a,b){const ap=typeof a.position==="number"?a.position:Number.MAX_SAFE_INTEGER,bp=typeof b.position==="number"?b.position:Number.MAX_SAFE_INTEGER;if(ap!==bp)return ap-bp;const au=typeof a.updatedAt==="number"?a.updatedAt:0,bu=typeof b.updatedAt==="number"?b.updatedAt:0;return bu-au}
     function normaliseUrl(url){url=(url||"").trim();if(!url)return"";if(!/^https?:\/\//i.test(url))url="https://"+url;return url}async function autoTitleIfEmpty(){if(!$("title").value.trim()&&$("url").value.trim())await generateTitleFromURL()}async function generateTitleFromURL(){const rawUrl=$("url").value.trim();if(!rawUrl){$("editorStatus").textContent="Enter a URL first.";return}const url=normaliseUrl(rawUrl);$("url").value=url;$("editorStatus").textContent="Getting title...";const fallbackTitle=titleFromURL(url);try{const proxy="https://api.allorigins.win/raw?url="+encodeURIComponent(url);const res=await fetch(proxy);if(!res.ok)throw new Error("Fetch failed");const html=await res.text();const doc=new DOMParser().parseFromString(html,"text/html");let title=doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('meta[name="twitter:title"]')?.content||doc.querySelector("title")?.textContent||fallbackTitle;title=cleanTitle(title);$("title").value=title||fallbackTitle;$("editorStatus").textContent="Title added."}catch(e){$("title").value=fallbackTitle;$("editorStatus").textContent="Could not access page title. Used URL title instead."}}function cleanTitle(title){return String(title||"").replace(/\s+/g," ").replace(/\|.*$/," ").replace(/ - YouTube$/i,"").replace(/ - Google Search$/i,"").trim()}function titleFromURL(url){try{const u=new URL(url);let path=u.pathname.split("/").filter(Boolean).pop()||u.hostname;path=decodeURIComponent(path).replace(/\.[a-z0-9]+$/i,"").replace(/[-_]+/g," ").replace(/\s+/g," ").trim();if(!path||path===u.hostname)return u.hostname.replace(/^www\./,"");return path.replace(/\b\w/g,c=>c.toUpperCase())}catch(e){return"Untitled"}}
     async function saveBookmark(){const existing=editingId?bookmarks.find(b=>b.id===editingId):null;const item=cleanBookmark({id:editingId||("local_"+Date.now()),title:$("title").value.trim(),url:normaliseUrl($("url").value),category:editCategory,folder:editFolder.trim()||$("folder").value.trim(),tags:$("tags").value.split(",").map(x=>x.trim()).filter(Boolean),note:$("note").value.trim(),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now(),position:existing?.position??bookmarks.length});if(!item.title||!item.url){$("editorStatus").textContent="Please enter title and URL.";return}if(firebaseConnected){await window.FirebaseBridge.save(item)}else{const exists=bookmarks.some(b=>b.id===item.id);bookmarks=exists?bookmarks.map(b=>b.id===item.id?item:b):[item,...bookmarks];normalisePositions(false);saveLocal()}resetEditor();closeEditor();render()}async function deleteBookmark(id){if(!confirm("Delete this bookmark?"))return;if(firebaseConnected){await window.FirebaseBridge.remove(id)}else{bookmarks=bookmarks.filter(b=>b.id!==id);normalisePositions(false);saveLocal();render()}}
