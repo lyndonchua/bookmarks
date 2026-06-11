@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bookmark Vault Compact</title>
+  <title>Bookmark Vault</title>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
       getFirestore, collection, addDoc, setDoc, doc, deleteDoc,
-      onSnapshot, serverTimestamp, query, orderBy, getDocs, writeBatch
+      onSnapshot, serverTimestamp, getDocs, writeBatch
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -25,19 +25,12 @@
     let unsubscribe = null;
     let firebaseReady = false;
 
-    function hasFirebaseConfig() {
-      return !firebaseConfig.apiKey.includes("PASTE_") &&
-             !firebaseConfig.projectId.includes("PASTE_");
-    }
-
-    if (hasFirebaseConfig()) {
-      try {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        firebaseReady = true;
-      } catch (err) {
-        console.error(err);
-      }
+    try {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      firebaseReady = true;
+    } catch (err) {
+      console.error(err);
     }
 
     window.FirebaseBridge = {
@@ -46,16 +39,18 @@
       startListening(callback) {
         if (!firebaseReady) return false;
         if (unsubscribe) unsubscribe();
-        const q = query(collection(db, "bookmarks"), orderBy("updatedAt", "desc"));
-        unsubscribe = onSnapshot(q, snap => {
+
+        unsubscribe = onSnapshot(collection(db, "bookmarks"), snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           callback(data);
         });
+
         return true;
       },
 
       async save(bookmark) {
         if (!firebaseReady) return false;
+
         const payload = {
           title: bookmark.title || "",
           url: bookmark.url || "",
@@ -63,6 +58,7 @@
           folder: bookmark.folder || "",
           tags: bookmark.tags || [],
           note: bookmark.note || "",
+          position: typeof bookmark.position === "number" ? bookmark.position : Date.now(),
           createdAt: bookmark.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp()
         };
@@ -72,6 +68,7 @@
         } else {
           await addDoc(collection(db, "bookmarks"), payload);
         }
+
         return true;
       },
 
@@ -83,8 +80,11 @@
 
       async importMany(items) {
         if (!firebaseReady) return false;
+
         const batch = writeBatch(db);
-        items.forEach(item => {
+        const base = Date.now();
+
+        items.forEach((item, index) => {
           const ref = doc(collection(db, "bookmarks"));
           batch.set(ref, {
             title: item.title || "",
@@ -93,10 +93,31 @@
             folder: item.folder || "",
             tags: item.tags || [],
             note: item.note || "",
+            position: base + index,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
         });
+
+        await batch.commit();
+        return true;
+      },
+
+      async updatePositions(items) {
+        if (!firebaseReady) return false;
+
+        const batch = writeBatch(db);
+
+        items.forEach((item, index) => {
+          if (item.id && !item.id.startsWith("local_")) {
+            batch.set(
+              doc(db, "bookmarks", item.id),
+              { position: index, updatedAt: serverTimestamp() },
+              { merge: true }
+            );
+          }
+        });
+
         await batch.commit();
         return true;
       },
@@ -110,1003 +131,67 @@
   </script>
 
   <style>
-    :root{
-      --bg:#07111f;
-      --panel:#0c1628;
-      --panel2:#101d33;
-      --line:#243650;
-      --text:#eaf2ff;
-      --muted:#95a3b8;
-      --accent:#38bdf8;
-      --green:#22c55e;
-      --red:#ef4444;
-      --yellow:#f59e0b;
-    }
-
+    :root{--bg:#07111f;--panel:#0c1628;--panel2:#101d33;--line:#243650;--text:#eaf2ff;--muted:#95a3b8;--accent:#38bdf8;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b}
     *{box-sizing:border-box}
-
-    html,body{
-      margin:0;
-      min-height:100%;
-      font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-      background:var(--bg);
-      color:var(--text);
-    }
-
-    body{
-      background:
-        radial-gradient(circle at top left,rgba(56,189,248,.15),transparent 34%),
-        radial-gradient(circle at bottom right,rgba(34,197,94,.1),transparent 32%),
-        var(--bg);
-    }
-
-    button,input,select{font:inherit}
-
-    button{
-      border:1px solid var(--line);
-      background:var(--panel2);
-      color:var(--text);
-      border-radius:10px;
-      padding:8px 10px;
-      cursor:pointer;
-    }
-
-    input,select{
-      width:100%;
-      border:1px solid var(--line);
-      background:#050b16;
-      color:var(--text);
-      border-radius:11px;
-      padding:9px 10px;
-      outline:none;
-      min-height:38px;
-    }
-
-    input:focus,select:focus{border-color:var(--accent)}
-
+    html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    body{background:radial-gradient(circle at top left,rgba(56,189,248,.15),transparent 34%),radial-gradient(circle at bottom right,rgba(34,197,94,.1),transparent 32%),var(--bg)}
+    button,input{font:inherit}
+    button{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:8px 10px;cursor:pointer}
+    input{width:100%;border:1px solid var(--line);background:#050b16;color:var(--text);border-radius:11px;padding:9px 10px;outline:none;min-height:38px}
+    input:focus{border-color:var(--accent)}
     .hidden{display:none!important}
-
-    .primary{
-      background:linear-gradient(135deg,#0ea5e9,#22c55e);
-      color:#00111f;
-      font-weight:800;
-      border:0;
-    }
-
-    .danger{
-      background:rgba(239,68,68,.14);
-      border-color:rgba(239,68,68,.35);
-      color:#fecaca;
-    }
-
-    .warn{
-      background:rgba(245,158,11,.14);
-      border-color:rgba(245,158,11,.35);
-      color:#fde68a;
-    }
-
-    .login{
-      min-height:100vh;
-      display:grid;
-      place-items:center;
-      padding:18px;
-    }
-
-    .login-card{
-      width:min(390px,100%);
-      background:rgba(12,22,40,.94);
-      border:1px solid rgba(148,163,184,.18);
-      border-radius:20px;
-      padding:20px;
-      box-shadow:0 14px 40px rgba(0,0,0,.35);
-    }
-
-    .logo-row{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      margin-bottom:12px;
-    }
-
-    .logo{
-      width:36px;
-      height:36px;
-      border-radius:13px;
-      background:linear-gradient(135deg,var(--accent),var(--green));
-      display:grid;
-      place-items:center;
-      font-weight:900;
-      color:#00111f;
-    }
-
-    h1{
-      font-size:20px;
-      margin:0;
-    }
-
-    .login-row{
-      display:flex;
-      gap:8px;
-      margin-top:12px;
-    }
-
-    .login-row input{flex:1}
-
-    .app{
-      max-width:900px;
-      margin:0 auto;
-      padding:8px;
-    }
-
-    .top{
-      position:sticky;
-      top:0;
-      z-index:20;
-      background:linear-gradient(to bottom,rgba(7,17,31,.98),rgba(7,17,31,.88));
-      backdrop-filter:blur(12px);
-      padding:6px 0;
-      border-bottom:1px solid rgba(148,163,184,.08);
-    }
-
-    .top-line{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
-      margin-bottom:6px;
-    }
-
-    .top-line h1{
-      font-size:16px;
-      letter-spacing:.2px;
-    }
-
-    .menu-btn{
-      width:36px;
-      height:36px;
-      padding:0;
-      display:grid;
-      place-items:center;
-      font-size:18px;
-    }
-
-    .controls{
-      display:grid;
-      grid-template-columns:1fr 105px;
-      gap:6px;
-    }
-
-    .content{
-      padding:8px 0 72px;
-    }
-
-    .count{
-      color:var(--muted);
-      font-size:12px;
-      margin:0 2px 7px;
-    }
-
-    .list{
-      display:grid;
-      gap:6px;
-    }
-
-    .row{
-      display:grid;
-      grid-template-columns:25px 1fr auto;
-      gap:8px;
-      align-items:center;
-      background:rgba(12,22,40,.84);
-      border:1px solid rgba(148,163,184,.14);
-      border-radius:12px;
-      padding:7px;
-      min-height:48px;
-    }
-
-    .fav{
-      width:25px;
-      height:25px;
-      border-radius:8px;
-      background:#050b16;
-      display:grid;
-      place-items:center;
-      overflow:hidden;
-      color:var(--accent);
-      font-weight:800;
-      font-size:12px;
-    }
-
-    .fav img{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-    }
-
-    .main{
-      min-width:0;
-    }
-
-    .name-line{
-      display:flex;
-      gap:6px;
-      align-items:center;
-      min-width:0;
-    }
-
-    .name{
-      font-weight:750;
-      color:var(--text);
-      text-decoration:none;
-      display:block;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      font-size:14px;
-      line-height:1.15;
-      min-width:0;
-    }
-
-    .cat{
-      flex:0 0 auto;
-      font-size:10px;
-      color:#bae6fd;
-      border:1px solid rgba(56,189,248,.22);
-      background:rgba(56,189,248,.1);
-      padding:1px 5px;
-      border-radius:999px;
-    }
-
-    .meta{
-      color:var(--muted);
-      font-size:11px;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      margin-top:2px;
-    }
-
-    .actions{
-      display:flex;
-      gap:4px;
-    }
-
-    .mini{
-      font-size:11px;
-      padding:5px 6px;
-      border-radius:8px;
-    }
-
-    .empty{
-      text-align:center;
-      color:var(--muted);
-      border:1px dashed var(--line);
-      border-radius:14px;
-      padding:28px 14px;
-      margin-top:8px;
-      font-size:13px;
-    }
-
-    .fab{
-      position:fixed;
-      right:15px;
-      bottom:15px;
-      z-index:30;
-      width:46px;
-      height:46px;
-      border-radius:17px;
-      display:grid;
-      place-items:center;
-      font-size:24px;
-      box-shadow:0 12px 35px rgba(0,0,0,.35);
-    }
-
-    .modal{
-      position:fixed;
-      inset:0;
-      z-index:50;
-      background:rgba(0,0,0,.66);
-      display:grid;
-      place-items:end center;
-      padding:10px;
-    }
-
-    .modal-card{
-      width:min(600px,100%);
-      max-height:86vh;
-      overflow-y:auto;
-      background:#0c1628;
-      border:1px solid rgba(148,163,184,.22);
-      border-radius:20px;
-      padding:14px;
-      box-shadow:0 14px 40px rgba(0,0,0,.4);
-    }
-
-    .modal-head{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:8px;
-      margin-bottom:10px;
-    }
-
-    .modal-head h2{
-      font-size:17px;
-      margin:0;
-    }
-
-    .grid{
-      display:grid;
-      gap:8px;
-    }
-
-    .two{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:8px;
-    }
-
-    .url-row{
-      display:grid;
-      grid-template-columns:1fr 90px;
-      gap:6px;
-    }
-
-    .menu-grid{
-      display:grid;
-      gap:7px;
-    }
-
-    .notice{
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.35;
-      background:rgba(255,255,255,.03);
-      border:1px solid rgba(148,163,184,.12);
-      padding:9px;
-      border-radius:12px;
-    }
-
-    .small{
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.35;
-    }
-
-    .status{
-      color:#bae6fd;
-      font-size:12px;
-      min-height:16px;
-    }
-
-    @media(min-width:760px){
-      .list{
-        grid-template-columns:repeat(2,minmax(0,1fr));
-      }
-
-      .modal{
-        place-items:center;
-      }
-    }
-
-    @media(max-width:430px){
-      .app{padding:7px}
-      .row{
-        grid-template-columns:24px 1fr auto;
-        gap:7px;
-      }
-      .actions{
-        flex-direction:column;
-      }
-      .mini{
-        padding:4px 6px;
-      }
-      .two{
-        grid-template-columns:1fr;
-      }
-      .url-row{
-        grid-template-columns:1fr 78px;
-      }
-    }
+    .primary{background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#00111f;font-weight:800;border:0}
+    .danger{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.35);color:#fecaca}
+    .warn{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35);color:#fde68a}
+    .login{min-height:100vh;display:grid;place-items:center;padding:18px}
+    .login-card{width:min(390px,100%);background:rgba(12,22,40,.94);border:1px solid rgba(148,163,184,.18);border-radius:20px;padding:20px;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+    .logo-row{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+    .logo{width:36px;height:36px;border-radius:13px;background:linear-gradient(135deg,var(--accent),var(--green));display:grid;place-items:center;font-weight:900;color:#00111f}
+    h1{font-size:20px;margin:0}.login-row{display:flex;gap:8px;margin-top:12px}.login-row input{flex:1}
+    .app{max-width:900px;margin:0 auto;padding:8px}
+    .top{position:sticky;top:0;z-index:20;background:linear-gradient(to bottom,rgba(7,17,31,.98),rgba(7,17,31,.88));backdrop-filter:blur(12px);padding:6px 0;border-bottom:1px solid rgba(148,163,184,.08)}
+    .top-line{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.top-line h1{font-size:16px;letter-spacing:.2px}
+    .menu-btn{width:36px;height:36px;padding:0;display:grid;place-items:center;font-size:18px}.search-row{margin-bottom:6px}
+    .button-row{display:flex;gap:6px;overflow-x:auto;padding:2px 0 5px;scrollbar-width:none}.button-row::-webkit-scrollbar{display:none}
+    .filter-btn,.folder-btn{white-space:nowrap;font-size:12px;padding:7px 10px;border-radius:999px;color:#cbd5e1;background:rgba(16,29,51,.76)}
+    .filter-btn.active,.folder-btn.active{color:#00111f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;font-weight:800}
+    .content{padding:8px 0 72px}.count{color:var(--muted);font-size:12px;margin:0 2px 7px;display:flex;justify-content:space-between;gap:8px;align-items:center}.drag-note{font-size:11px;color:#64748b}
+    .list{display:grid;gap:6px}.row{display:grid;grid-template-columns:24px 25px 1fr auto;gap:7px;align-items:center;background:rgba(12,22,40,.84);border:1px solid rgba(148,163,184,.14);border-radius:12px;padding:7px;min-height:48px;transition:.12s}.row.dragging{opacity:.45;transform:scale(.99);border-color:var(--accent)}
+    .drag{width:24px;height:28px;border-radius:8px;display:grid;place-items:center;color:#94a3b8;cursor:grab;user-select:none;font-size:17px;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12)}.drag:active{cursor:grabbing}
+    .fav{width:25px;height:25px;border-radius:8px;background:#050b16;display:grid;place-items:center;overflow:hidden;color:var(--accent);font-weight:800;font-size:12px}.fav img{width:100%;height:100%;object-fit:cover}
+    .main{min-width:0}.name-line{display:flex;gap:6px;align-items:center;min-width:0}.name{font-weight:750;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;line-height:1.15;min-width:0}.cat{flex:0 0 auto;font-size:10px;color:#bae6fd;border:1px solid rgba(56,189,248,.22);background:rgba(56,189,248,.1);padding:1px 5px;border-radius:999px}.meta{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.actions{display:flex;gap:4px}.mini{font-size:11px;padding:5px 6px;border-radius:8px}
+    .empty{text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:28px 14px;margin-top:8px;font-size:13px}.fab{position:fixed;right:15px;bottom:15px;z-index:30;width:46px;height:46px;border-radius:17px;display:grid;place-items:center;font-size:24px;box-shadow:0 12px 35px rgba(0,0,0,.35)}
+    .modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.66);display:grid;place-items:end center;padding:10px}.modal-card{width:min(600px,100%);max-height:86vh;overflow-y:auto;background:#0c1628;border:1px solid rgba(148,163,184,.22);border-radius:20px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.4)}.modal-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.modal-head h2{font-size:17px;margin:0}.grid{display:grid;gap:8px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.url-row{display:grid;grid-template-columns:1fr 86px;gap:6px}.choice-title{color:var(--muted);font-size:12px;margin-top:2px}.choice-row{display:flex;gap:6px;flex-wrap:wrap}.choice-btn{font-size:12px;padding:7px 10px;border-radius:999px}.choice-btn.active{color:#00111f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;font-weight:800}.menu-grid{display:grid;gap:7px}.notice{font-size:12px;color:var(--muted);line-height:1.35;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);padding:9px;border-radius:12px}.small{font-size:12px;color:var(--muted);line-height:1.35}.status{color:#bae6fd;font-size:12px;min-height:16px}
+    @media(min-width:760px){.list{grid-template-columns:repeat(2,minmax(0,1fr))}.modal{place-items:center}}
+    @media(max-width:430px){.app{padding:7px}.row{grid-template-columns:22px 24px 1fr auto;gap:6px}.actions{flex-direction:column}.mini{padding:4px 6px}.two{grid-template-columns:1fr}.url-row{grid-template-columns:1fr 76px}}
   </style>
 </head>
 
 <body>
-  <section id="login" class="login">
-    <div class="login-card">
-      <div class="logo-row">
-        <div class="logo">B</div>
-        <h1>Bookmark Vault</h1>
-      </div>
-      <div class="login-row">
-        <input id="passInput" type="password" placeholder="Passcode" />
-        <button class="primary" onclick="unlock()">Unlock</button>
-      </div>
-      <div id="loginMsg" class="status"></div>
-    </div>
-  </section>
-
-  <main id="app" class="app hidden">
-    <div class="top">
-      <div class="top-line">
-        <h1>Bookmark Vault</h1>
-        <button class="menu-btn" onclick="openMenu()">☰</button>
-      </div>
-
-      <div class="controls">
-        <input id="search" placeholder="Search..." oninput="render()" />
-        <select id="filter" onchange="setFilter(this.value)">
-          <option value="All">All</option>
-          <option value="Work">Work</option>
-          <option value="Personal">Personal</option>
-        </select>
-      </div>
-    </div>
-
-    <section class="content">
-      <div id="count" class="count">0 bookmarks</div>
-      <div id="list" class="list"></div>
-      <div id="empty" class="empty hidden">No bookmarks yet. Tap + to add or import bookmarks.</div>
-    </section>
-
-    <button class="fab primary" onclick="openEditor()">+</button>
-  </main>
-
-  <section id="editorModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="editorTitle">Add bookmark</h2>
-        <button onclick="closeEditor()">Close</button>
-      </div>
-
-      <div class="grid">
-        <input id="title" placeholder="Title" />
-
-        <div class="url-row">
-          <input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" />
-          <button onclick="generateTitleFromURL()">AI Title</button>
-        </div>
-
-        <select id="category">
-          <option value="Work">Work</option>
-          <option value="Personal">Personal</option>
-        </select>
-
-        <input id="folder" placeholder="Folder / topic" />
-        <input id="tags" placeholder="Tags, comma separated" />
-        <input id="note" placeholder="Short note" />
-
-        <div class="two">
-          <button class="primary" onclick="saveBookmark()">Save</button>
-          <button onclick="resetEditor()">Reset</button>
-        </div>
-
-        <div id="editorStatus" class="status"></div>
-      </div>
-    </div>
-  </section>
-
-  <section id="menuModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>Menu</h2>
-        <button onclick="closeMenu()">Close</button>
-      </div>
-
-      <div class="menu-grid">
-        <button onclick="openImport()">Import Chrome / Edge / JSON</button>
-        <button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button>
-        <button onclick="exportJSON()">Export JSON backup</button>
-        <button onclick="downloadFirebaseRules()">Download Firestore Rules</button>
-        <button class="warn" onclick="lock()">Lock</button>
-
-        <div class="notice">
-          Firebase collection used: <b>bookmarks</b>.
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="importModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>Import bookmarks</h2>
-        <button onclick="closeImport()">Close</button>
-      </div>
-
-      <div class="grid">
-        <input id="importFile" type="file" accept=".html,.htm,.json" />
-
-        <select id="importMode">
-          <option value="auto">Auto-detect Work/Personal</option>
-          <option value="Work">Import all as Work</option>
-          <option value="Personal">Import all as Personal</option>
-        </select>
-
-        <button class="primary" onclick="importBookmarks()">Import</button>
-        <div id="importStatus" class="status"></div>
-
-        <div class="small">
-          Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.
-        </div>
-      </div>
-    </div>
-  </section>
+  <section id="login" class="login"><div class="login-card"><div class="logo-row"><div class="logo">B</div><h1>Bookmark Vault</h1></div><div class="login-row"><input id="passInput" type="password" placeholder="Passcode" /><button class="primary" onclick="unlock()">Unlock</button></div><div id="loginMsg" class="status"></div></div></section>
+  <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks yet. Tap + to add or import bookmarks.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
+  <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">AI Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
+  <section id="menuModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Menu</h2><button onclick="closeMenu()">Close</button></div><div class="menu-grid"><button onclick="openImport()">Import Chrome / Edge / JSON</button><button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button><button onclick="exportJSON()">Export JSON backup</button><button onclick="downloadFirebaseRules()">Download Firestore Rules</button><button class="warn" onclick="lock()">Lock</button><div class="notice">Firebase collection used: <b>bookmarks</b>. Reordering is saved using the <b>position</b> field.</div></div></div></section>
+  <section id="importModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Import bookmarks</h2><button onclick="closeImport()">Close</button></div><div class="grid"><input id="importFile" type="file" accept=".html,.htm,.json" /><div class="choice-title">Import as</div><div class="choice-row"><button id="impAuto" class="choice-btn active" onclick="setImportMode('auto')">Auto</button><button id="impWork" class="choice-btn" onclick="setImportMode('Work')">Work</button><button id="impPersonal" class="choice-btn" onclick="setImportMode('Personal')">Personal</button></div><button class="primary" onclick="importBookmarks()">Import</button><div id="importStatus" class="status"></div><div class="small">Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.</div></div></div></section>
 
   <script>
-    const PASSCODE = "876766";
-    const LOCAL_STORE = "bookmarkVaultCompactLocalV4";
-
-    let bookmarks = [];
-    let activeFilter = "All";
-    let editingId = null;
-    let firebaseConnected = false;
-
-    const $ = id => document.getElementById(id);
-
-    function unlock(){
-      if ($("passInput").value.trim() !== PASSCODE) {
-        $("loginMsg").textContent = "Wrong passcode.";
-        return;
-      }
-
-      sessionStorage.setItem("bookmarkVaultUnlocked","1");
-      $("login").classList.add("hidden");
-      $("app").classList.remove("hidden");
-      startApp();
-    }
-
-    function lock(){
-      sessionStorage.removeItem("bookmarkVaultUnlocked");
-      $("app").classList.add("hidden");
-      $("login").classList.remove("hidden");
-      $("passInput").value = "";
-      closeMenu();
-    }
-
-    $("passInput").addEventListener("keydown", e => {
-      if(e.key === "Enter") unlock();
-    });
-
-    function startApp(){
-      firebaseConnected = window.FirebaseBridge && window.FirebaseBridge.ready();
-
-      if(firebaseConnected){
-        window.FirebaseBridge.startListening(data => {
-          bookmarks = data.map(cleanBookmark);
-          saveLocal();
-          render();
-        });
-      } else {
-        loadLocal();
-        render();
-      }
-    }
-
-    function cleanBookmark(b){
-      return {
-        id: b.id || ("local_" + Date.now() + Math.random()),
-        title: b.title || "Untitled",
-        url: b.url || "",
-        category: b.category || "Work",
-        folder: b.folder || "",
-        tags: Array.isArray(b.tags) ? b.tags : [],
-        note: b.note || b.desc || "",
-        createdAt: b.createdAt || Date.now(),
-        updatedAt: b.updatedAt || Date.now()
-      };
-    }
-
-    function loadLocal(){
-      try {
-        bookmarks = JSON.parse(localStorage.getItem(LOCAL_STORE) || "[]").map(cleanBookmark);
-      } catch(e) {
-        bookmarks = [];
-      }
-    }
-
-    function saveLocal(){
-      localStorage.setItem(LOCAL_STORE, JSON.stringify(bookmarks));
-    }
-
-    function normaliseUrl(url){
-      url = (url || "").trim();
-      if(!url) return "";
-      if(!/^https?:\/\//i.test(url)) url = "https://" + url;
-      return url;
-    }
-
-    async function autoTitleIfEmpty(){
-      if(!$("title").value.trim() && $("url").value.trim()){
-        await generateTitleFromURL();
-      }
-    }
-
-    async function generateTitleFromURL(){
-      const rawUrl = $("url").value.trim();
-
-      if(!rawUrl){
-        $("editorStatus").textContent = "Enter a URL first.";
-        return;
-      }
-
-      const url = normaliseUrl(rawUrl);
-      $("url").value = url;
-      $("editorStatus").textContent = "Getting title...";
-
-      const fallbackTitle = titleFromURL(url);
-
-      try {
-        const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-        const res = await fetch(proxy);
-
-        if(!res.ok) throw new Error("Fetch failed");
-
-        const html = await res.text();
-        const doc = new DOMParser().parseFromString(html, "text/html");
-
-        let title =
-          doc.querySelector('meta[property="og:title"]')?.content ||
-          doc.querySelector('meta[name="twitter:title"]')?.content ||
-          doc.querySelector("title")?.textContent ||
-          fallbackTitle;
-
-        title = cleanTitle(title);
-
-        $("title").value = title || fallbackTitle;
-        $("editorStatus").textContent = "Title added.";
-      } catch(e) {
-        $("title").value = fallbackTitle;
-        $("editorStatus").textContent = "Could not access page title. Used URL title instead.";
-      }
-    }
-
-    function cleanTitle(title){
-      return String(title || "")
-        .replace(/\s+/g," ")
-        .replace(/\|.*$/,"")
-        .replace(/ - YouTube$/i,"")
-        .replace(/ - Google Search$/i,"")
-        .trim();
-    }
-
-    function titleFromURL(url){
-      try {
-        const u = new URL(url);
-        let path = u.pathname.split("/").filter(Boolean).pop() || u.hostname;
-        path = decodeURIComponent(path)
-          .replace(/\.[a-z0-9]+$/i,"")
-          .replace(/[-_]+/g," ")
-          .replace(/\s+/g," ")
-          .trim();
-
-        if(!path || path === u.hostname){
-          return u.hostname.replace(/^www\./,"");
-        }
-
-        return path.replace(/\b\w/g, c => c.toUpperCase());
-      } catch(e) {
-        return "Untitled";
-      }
-    }
-
-    async function saveBookmark(){
-      const item = cleanBookmark({
-        id: editingId || ("local_" + Date.now()),
-        title: $("title").value.trim(),
-        url: normaliseUrl($("url").value),
-        category: $("category").value,
-        folder: $("folder").value.trim(),
-        tags: $("tags").value.split(",").map(x=>x.trim()).filter(Boolean),
-        note: $("note").value.trim(),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-
-      if(!item.title || !item.url){
-        $("editorStatus").textContent = "Please enter title and URL.";
-        return;
-      }
-
-      if(firebaseConnected){
-        await window.FirebaseBridge.save(item);
-      } else {
-        const exists = bookmarks.some(b => b.id === item.id);
-        bookmarks = exists
-          ? bookmarks.map(b => b.id === item.id ? item : b)
-          : [item, ...bookmarks];
-
-        saveLocal();
-      }
-
-      resetEditor();
-      closeEditor();
-      render();
-    }
-
-    async function deleteBookmark(id){
-      if(!confirm("Delete this bookmark?")) return;
-
-      if(firebaseConnected){
-        await window.FirebaseBridge.remove(id);
-      } else {
-        bookmarks = bookmarks.filter(b => b.id !== id);
-        saveLocal();
-        render();
-      }
-    }
-
-    function openEditor(id=null){
-      editingId = id;
-      $("editorTitle").textContent = id ? "Edit bookmark" : "Add bookmark";
-
-      if(id){
-        const b = bookmarks.find(x => x.id === id);
-        if(b){
-          $("title").value = b.title || "";
-          $("url").value = b.url || "";
-          $("category").value = b.category || "Work";
-          $("folder").value = b.folder || "";
-          $("tags").value = (b.tags || []).join(", ");
-          $("note").value = b.note || "";
-        }
-      } else {
-        resetEditor(false);
-      }
-
-      $("editorModal").classList.remove("hidden");
-    }
-
-    function closeEditor(){
-      $("editorModal").classList.add("hidden");
-    }
-
-    function resetEditor(clearId=true){
-      if(clearId) editingId = null;
-      ["title","url","folder","tags","note"].forEach(id => $(id).value = "");
-      $("category").value = activeFilter === "Personal" ? "Personal" : "Work";
-      $("editorStatus").textContent = "";
-    }
-
-    function openMenu(){
-      $("menuModal").classList.remove("hidden");
-    }
-
-    function closeMenu(){
-      $("menuModal").classList.add("hidden");
-    }
-
-    function openImport(){
-      closeMenu();
-      $("importModal").classList.remove("hidden");
-    }
-
-    function closeImport(){
-      $("importModal").classList.add("hidden");
-    }
-
-    function setFilter(value){
-      activeFilter = value;
-      render();
-    }
-
-    function render(){
-      const q = $("search").value.toLowerCase().trim();
-
-      let data = bookmarks.filter(b => {
-        const hay = [
-          b.title,
-          b.url,
-          b.category,
-          b.folder,
-          b.note,
-          (b.tags || []).join(" ")
-        ].join(" ").toLowerCase();
-
-        return (activeFilter === "All" || b.category === activeFilter) &&
-               (!q || hay.includes(q));
-      });
-
-      data.sort((a,b) => {
-        const au = typeof a.updatedAt === "number" ? a.updatedAt : 0;
-        const bu = typeof b.updatedAt === "number" ? b.updatedAt : 0;
-        return bu - au;
-      });
-
-      $("count").textContent = `${data.length} bookmark${data.length === 1 ? "" : "s"}`;
-      $("empty").classList.toggle("hidden", data.length > 0);
-
-      $("list").innerHTML = data.map(b => {
-        const domain = getDomain(b.url);
-        const fav = domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : "";
-
-        return `
-          <article class="row">
-            <div class="fav">${fav ? `<img src="${fav}" onerror="this.remove()">` : escapeHTML((b.title || "B")[0])}</div>
-
-            <div class="main">
-              <div class="name-line">
-                <a class="name" href="${escapeHTML(b.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(b.title)}</a>
-                <span class="cat">${escapeHTML(b.category)}</span>
-              </div>
-              <div class="meta">${escapeHTML(domain || b.url)}${b.folder ? " · " + escapeHTML(b.folder) : ""}</div>
-            </div>
-
-            <div class="actions">
-              <button class="mini" onclick="openEditor('${b.id}')">Edit</button>
-              <button class="mini danger" onclick="deleteBookmark('${b.id}')">Del</button>
-            </div>
-          </article>
-        `;
-      }).join("");
-    }
-
-    function getDomain(url){
-      try {
-        return new URL(url).hostname.replace(/^www\./,"");
-      } catch(e) {
-        return "";
-      }
-    }
-
-    function escapeHTML(str){
-      return String(str || "").replace(/[&<>"']/g, m => ({
-        "&":"&amp;",
-        "<":"&lt;",
-        ">":"&gt;",
-        '"':"&quot;",
-        "'":"&#039;"
-      }[m]));
-    }
-
-    async function importBookmarks(){
-      const file = $("importFile").files[0];
-
-      if(!file){
-        $("importStatus").textContent = "Choose a file first.";
-        return;
-      }
-
-      const text = await file.text();
-      const mode = $("importMode").value;
-      let imported = [];
-
-      if(file.name.toLowerCase().endsWith(".json")){
-        try {
-          imported = JSON.parse(text).map(cleanBookmark);
-          if(mode !== "auto") imported = imported.map(x => ({...x, category: mode}));
-        } catch(e) {
-          $("importStatus").textContent = "Invalid JSON.";
-          return;
-        }
-      } else {
-        imported = parseBookmarkHTML(text, mode);
-      }
-
-      const existing = new Set(bookmarks.map(b => b.url));
-      imported = imported.filter(b => b.url && !existing.has(b.url));
-
-      if(firebaseConnected){
-        await window.FirebaseBridge.importMany(imported);
-      } else {
-        bookmarks = [...imported, ...bookmarks];
-        saveLocal();
-        render();
-      }
-
-      $("importStatus").textContent = `Imported ${imported.length} new bookmark${imported.length === 1 ? "" : "s"}.`;
-    }
-
-    function parseBookmarkHTML(html, mode){
-      const doc = new DOMParser().parseFromString(html, "text/html");
-
-      return [...doc.querySelectorAll("a[href]")].map(a => {
-        const folder = getFolderPath(a);
-        let category = "Work";
-
-        if(mode === "Work" || mode === "Personal"){
-          category = mode;
-        } else {
-          const f = folder.toLowerCase();
-          category = (f.includes("personal") || f.includes("family") || f.includes("home")) ? "Personal" : "Work";
-        }
-
-        return cleanBookmark({
-          title: (a.textContent || "Untitled").trim(),
-          url: normaliseUrl(a.getAttribute("href")),
-          category,
-          folder,
-          tags: folder ? folder.split("/").map(x=>x.trim()).filter(Boolean).slice(-2) : [],
-          note: "",
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        });
-      });
-    }
-
-    function getFolderPath(a){
-      let node = a.parentElement;
-      const parts = [];
-
-      while(node){
-        const prev = node.previousElementSibling;
-
-        if(prev && prev.tagName && prev.tagName.toLowerCase() === "h3"){
-          parts.unshift(prev.textContent.trim());
-        }
-
-        node = node.parentElement;
-      }
-
-      return parts.join(" / ");
-    }
-
-    async function exportJSON(){
-      const data = firebaseConnected ? await window.FirebaseBridge.getAllOnce() : bookmarks;
-      downloadFile("bookmark-vault-backup.json", JSON.stringify(data, null, 2), "application/json");
-    }
-
-    async function exportChromeHTML(){
-      const data = firebaseConnected ? await window.FirebaseBridge.getAllOnce() : bookmarks;
-      const work = data.filter(b => (b.category || "Work") === "Work");
-      const personal = data.filter(b => b.category === "Personal");
-
-      const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<TITLE>Bookmarks</TITLE>
-<H1>Bookmarks</H1>
-<DL><p>
-  <DT><H3>Work</H3>
-  <DL><p>
-${work.map(bookmarkLine).join("\n")}
-  </DL><p>
-  <DT><H3>Personal</H3>
-  <DL><p>
-${personal.map(bookmarkLine).join("\n")}
-  </DL><p>
-</DL><p>`;
-
-      downloadFile("bookmark-vault-chrome-edge.html", html, "text/html");
-    }
-
-    function bookmarkLine(b){
-      return `    <DT><A HREF="${escapeHTML(b.url)}">${escapeHTML(b.title)}</A>`;
-    }
-
-    function downloadFirebaseRules(){
-      const rules = `rules_version = '2';
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /bookmarks/{bookmarkId} {
-      allow read, write: if true;
-    }
-  }
-}
-
-/*
-For personal use/testing only.
-For stronger security later, use Firebase Authentication.
-*/`;
-
-      downloadFile("firestore.rules", rules, "text/plain");
-    }
-
-    function downloadFile(name, content, type){
-      const blob = new Blob([content], {type});
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 700);
-    }
-
-    if(sessionStorage.getItem("bookmarkVaultUnlocked") === "1"){
-      $("login").classList.add("hidden");
-      $("app").classList.remove("hidden");
-      startApp();
-    }
+    const PASSCODE="876766",LOCAL_STORE="bookmarkVaultCompactLocalV5";let bookmarks=[],activeCategory="All",activeFolder="All",editingId=null,editCategory="Work",editFolder="",importMode="auto",firebaseConnected=false,draggedId=null;const $=id=>document.getElementById(id);
+    function unlock(){if($("passInput").value.trim()!==PASSCODE){$("loginMsg").textContent="Wrong passcode.";return}sessionStorage.setItem("bookmarkVaultUnlocked","1");$("login").classList.add("hidden");$("app").classList.remove("hidden");startApp()}function lock(){sessionStorage.removeItem("bookmarkVaultUnlocked");$("app").classList.add("hidden");$("login").classList.remove("hidden");$("passInput").value="";closeMenu()}$("passInput").addEventListener("keydown",e=>{if(e.key==="Enter")unlock()});
+    function startApp(){firebaseConnected=window.FirebaseBridge&&window.FirebaseBridge.ready();if(firebaseConnected){window.FirebaseBridge.startListening(data=>{bookmarks=data.map(cleanBookmark);normalisePositions(false);saveLocal();render()})}else{loadLocal();normalisePositions(false);render()}}
+    function cleanBookmark(b){return{id:b.id||("local_"+Date.now()+Math.random()),title:b.title||"Untitled",url:b.url||"",category:b.category||"Work",folder:b.folder||"",tags:Array.isArray(b.tags)?b.tags:[],note:b.note||b.desc||"",position:typeof b.position==="number"?b.position:Number.MAX_SAFE_INTEGER,createdAt:b.createdAt||Date.now(),updatedAt:b.updatedAt||Date.now()}}
+    function loadLocal(){try{bookmarks=JSON.parse(localStorage.getItem(LOCAL_STORE)||"[]").map(cleanBookmark)}catch(e){bookmarks=[]}}function saveLocal(){localStorage.setItem(LOCAL_STORE,JSON.stringify(bookmarks))}function normalisePositions(save=true){bookmarks.sort(sortBookmarks);let changed=false;bookmarks.forEach((b,i)=>{if(typeof b.position!=="number"||b.position===Number.MAX_SAFE_INTEGER){b.position=i;changed=true}});if(changed&&save)persistPositions(bookmarks)}function sortBookmarks(a,b){const ap=typeof a.position==="number"?a.position:Number.MAX_SAFE_INTEGER,bp=typeof b.position==="number"?b.position:Number.MAX_SAFE_INTEGER;if(ap!==bp)return ap-bp;const au=typeof a.updatedAt==="number"?a.updatedAt:0,bu=typeof b.updatedAt==="number"?b.updatedAt:0;return bu-au}
+    function normaliseUrl(url){url=(url||"").trim();if(!url)return"";if(!/^https?:\/\//i.test(url))url="https://"+url;return url}async function autoTitleIfEmpty(){if(!$("title").value.trim()&&$("url").value.trim())await generateTitleFromURL()}async function generateTitleFromURL(){const rawUrl=$("url").value.trim();if(!rawUrl){$("editorStatus").textContent="Enter a URL first.";return}const url=normaliseUrl(rawUrl);$("url").value=url;$("editorStatus").textContent="Getting title...";const fallbackTitle=titleFromURL(url);try{const proxy="https://api.allorigins.win/raw?url="+encodeURIComponent(url);const res=await fetch(proxy);if(!res.ok)throw new Error("Fetch failed");const html=await res.text();const doc=new DOMParser().parseFromString(html,"text/html");let title=doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('meta[name="twitter:title"]')?.content||doc.querySelector("title")?.textContent||fallbackTitle;title=cleanTitle(title);$("title").value=title||fallbackTitle;$("editorStatus").textContent="Title added."}catch(e){$("title").value=fallbackTitle;$("editorStatus").textContent="Could not access page title. Used URL title instead."}}function cleanTitle(title){return String(title||"").replace(/\s+/g," ").replace(/\|.*$/," ").replace(/ - YouTube$/i,"").replace(/ - Google Search$/i,"").trim()}function titleFromURL(url){try{const u=new URL(url);let path=u.pathname.split("/").filter(Boolean).pop()||u.hostname;path=decodeURIComponent(path).replace(/\.[a-z0-9]+$/i,"").replace(/[-_]+/g," ").replace(/\s+/g," ").trim();if(!path||path===u.hostname)return u.hostname.replace(/^www\./,"");return path.replace(/\b\w/g,c=>c.toUpperCase())}catch(e){return"Untitled"}}
+    async function saveBookmark(){const existing=editingId?bookmarks.find(b=>b.id===editingId):null;const item=cleanBookmark({id:editingId||("local_"+Date.now()),title:$("title").value.trim(),url:normaliseUrl($("url").value),category:editCategory,folder:editFolder.trim()||$("folder").value.trim(),tags:$("tags").value.split(",").map(x=>x.trim()).filter(Boolean),note:$("note").value.trim(),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now(),position:existing?.position??bookmarks.length});if(!item.title||!item.url){$("editorStatus").textContent="Please enter title and URL.";return}if(firebaseConnected){await window.FirebaseBridge.save(item)}else{const exists=bookmarks.some(b=>b.id===item.id);bookmarks=exists?bookmarks.map(b=>b.id===item.id?item:b):[item,...bookmarks];normalisePositions(false);saveLocal()}resetEditor();closeEditor();render()}async function deleteBookmark(id){if(!confirm("Delete this bookmark?"))return;if(firebaseConnected){await window.FirebaseBridge.remove(id)}else{bookmarks=bookmarks.filter(b=>b.id!==id);normalisePositions(false);saveLocal();render()}}
+    function openEditor(id=null){editingId=id;$("editorTitle").textContent=id?"Edit bookmark":"Add bookmark";if(id){const b=bookmarks.find(x=>x.id===id);if(b){$("title").value=b.title||"";$("url").value=b.url||"";setEditCategory(b.category||"Work");setEditFolder(b.folder||"");$("folder").value=b.folder||"";$("tags").value=(b.tags||[]).join(", ");$("note").value=b.note||""}}else resetEditor(false);renderEditorFolders();$("editorModal").classList.remove("hidden")}function closeEditor(){$("editorModal").classList.add("hidden")}function resetEditor(clearId=true){if(clearId)editingId=null;["title","url","folder","tags","note"].forEach(id=>$(id).value="");setEditCategory(activeCategory==="Personal"?"Personal":"Work");setEditFolder(activeFolder!=="All"?activeFolder:"");$("folder").value=editFolder;$("editorStatus").textContent="";renderEditorFolders()}function setEditCategory(value){editCategory=value;$("editCatWork")?.classList.toggle("active",value==="Work");$("editCatPersonal")?.classList.toggle("active",value==="Personal")}function setEditFolder(value){editFolder=value.trim();renderEditorFolders()}function renderEditorFolders(){const wrap=$("editorFolderButtons");if(!wrap)return;const folders=getFolderStats().map(x=>x.name),defaults=["Economics","Hockey","Apps","Admin","PW","AI","Finance","Family","Others"];const all=[...new Set([...folders,...defaults])].filter(Boolean);wrap.innerHTML=all.map(folder=>`<button class="choice-btn ${editFolder===folder?"active":""}" onclick="selectEditorFolder('${escapeJS(folder)}')">${escapeHTML(folder)}</button>`).join("")}function selectEditorFolder(folder){editFolder=folder;$("folder").value=folder;renderEditorFolders()}
+    function openMenu(){$("menuModal").classList.remove("hidden")}function closeMenu(){$("menuModal").classList.add("hidden")}function openImport(){closeMenu();$("importModal").classList.remove("hidden")}function closeImport(){$("importModal").classList.add("hidden")}function setCategory(value){activeCategory=value;render()}function setFolder(value){activeFolder=value;render()}
+    function getFilteredBookmarks(){const q=$("search").value.toLowerCase().trim();return bookmarks.slice().sort(sortBookmarks).filter(b=>{const hay=[b.title,b.url,b.category,b.folder,b.note,(b.tags||[]).join(" ")].join(" ").toLowerCase();return(activeCategory==="All"||b.category===activeCategory)&&(activeFolder==="All"||b.folder===activeFolder)&&(!q||hay.includes(q))})}function getFolderStats(){const map=new Map();bookmarks.forEach(b=>{const folder=(b.folder||"").trim();if(!folder)return;if(activeCategory!=="All"&&b.category!==activeCategory)return;map.set(folder,(map.get(folder)||0)+1)});return[...map.entries()].map(([name,count])=>({name,count})).sort((a,b)=>a.name.localeCompare(b.name))}function renderCategoryButtons(){const counts={All:bookmarks.length,Work:bookmarks.filter(b=>b.category==="Work").length,Personal:bookmarks.filter(b=>b.category==="Personal").length};$("categoryButtons").innerHTML=["All","Work","Personal"].map(cat=>`<button class="filter-btn ${activeCategory===cat?"active":""}" onclick="setCategory('${cat}')">${cat} ${counts[cat]}</button>`).join("")}function renderFolderButtons(){const folders=getFolderStats();const total=activeCategory==="All"?bookmarks.length:bookmarks.filter(b=>b.category===activeCategory).length;const buttons=[`<button class="folder-btn ${activeFolder==="All"?"active":""}" onclick="setFolder('All')">All Folders ${total}</button>`,...folders.map(f=>`<button class="folder-btn ${activeFolder===f.name?"active":""}" onclick="setFolder('${escapeJS(f.name)}')">${escapeHTML(f.name)} ${f.count}</button>`)];$("folderButtons").innerHTML=buttons.join("")}
+    function render(){renderCategoryButtons();renderFolderButtons();const data=getFilteredBookmarks();$("count").innerHTML=`<span>${data.length} bookmark${data.length===1?"":"s"}</span><span class="drag-note">Drag ☰ to reorder</span>`;$("empty").classList.toggle("hidden",data.length>0);$("list").innerHTML=data.map(b=>{const domain=getDomain(b.url);const fav=domain?`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`:"";return`<article class="row" draggable="true" data-id="${escapeHTML(b.id)}"><div class="drag" title="Drag to reorder">☰</div><div class="fav">${fav?`<img src="${fav}" onerror="this.remove()">`:escapeHTML((b.title||"B")[0])}</div><div class="main"><div class="name-line"><a class="name" href="${escapeHTML(b.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(b.title)}</a><span class="cat">${escapeHTML(b.category)}</span></div><div class="meta">${escapeHTML(domain||b.url)}${b.folder?" · "+escapeHTML(b.folder):""}</div></div><div class="actions"><button class="mini" onclick="openEditor('${escapeJS(b.id)}')">Edit</button><button class="mini danger" onclick="deleteBookmark('${escapeJS(b.id)}')">Del</button></div></article>`}).join("");setupDragAndDrop();renderEditorFolders()}
+    function setupDragAndDrop(){const rows=[...document.querySelectorAll(".row")];rows.forEach(row=>{row.addEventListener("dragstart",e=>{draggedId=row.dataset.id;row.classList.add("dragging");e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",draggedId)});row.addEventListener("dragend",()=>{row.classList.remove("dragging");draggedId=null});row.addEventListener("dragover",e=>{e.preventDefault();const dragging=document.querySelector(".row.dragging");if(!dragging||dragging===row)return;const rect=row.getBoundingClientRect();const halfway=rect.top+rect.height/2;const list=$("list");if(e.clientY<halfway)list.insertBefore(dragging,row);else list.insertBefore(dragging,row.nextSibling)});row.addEventListener("drop",e=>{e.preventDefault();saveVisibleOrder()})})}async function saveVisibleOrder(){const visibleIds=[...document.querySelectorAll(".row")].map(row=>row.dataset.id);if(!visibleIds.length)return;const currentSorted=bookmarks.slice().sort(sortBookmarks);const visibleSet=new Set(visibleIds);const visibleBookmarks=visibleIds.map(id=>bookmarks.find(b=>b.id===id)).filter(Boolean);const remaining=currentSorted.filter(b=>!visibleSet.has(b.id));bookmarks=[...visibleBookmarks,...remaining].map((b,index)=>({...b,position:index,updatedAt:Date.now()}));saveLocal();render();if(firebaseConnected)await window.FirebaseBridge.updatePositions(bookmarks)}async function persistPositions(items){saveLocal();if(firebaseConnected)await window.FirebaseBridge.updatePositions(items)}
+    function getDomain(url){try{return new URL(url).hostname.replace(/^www\./,"")}catch(e){return""}}function escapeHTML(str){return String(str||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}function escapeJS(str){return String(str||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}
+    function setImportMode(value){importMode=value;$("impAuto").classList.toggle("active",value==="auto");$("impWork").classList.toggle("active",value==="Work");$("impPersonal").classList.toggle("active",value==="Personal")}async function importBookmarks(){const file=$("importFile").files[0];if(!file){$("importStatus").textContent="Choose a file first.";return}const text=await file.text();let imported=[];if(file.name.toLowerCase().endsWith(".json")){try{imported=JSON.parse(text).map(cleanBookmark);if(importMode!=="auto")imported=imported.map(x=>({...x,category:importMode}))}catch(e){$("importStatus").textContent="Invalid JSON.";return}}else imported=parseBookmarkHTML(text,importMode);const existing=new Set(bookmarks.map(b=>b.url));imported=imported.filter(b=>b.url&&!existing.has(b.url));const base=bookmarks.length;imported=imported.map((b,index)=>({...b,position:base+index}));if(firebaseConnected)await window.FirebaseBridge.importMany(imported);else{bookmarks=[...bookmarks,...imported];normalisePositions(false);saveLocal();render()}$("importStatus").textContent=`Imported ${imported.length} new bookmark${imported.length===1?"":"s"}.`}
+    function parseBookmarkHTML(html,mode){const doc=new DOMParser().parseFromString(html,"text/html");return[...doc.querySelectorAll("a[href]")].map(a=>{const folder=getFolderPath(a);let category="Work";if(mode==="Work"||mode==="Personal")category=mode;else{const f=folder.toLowerCase();category=(f.includes("personal")||f.includes("family")||f.includes("home"))?"Personal":"Work"}return cleanBookmark({title:(a.textContent||"Untitled").trim(),url:normaliseUrl(a.getAttribute("href")),category,folder,tags:folder?folder.split("/").map(x=>x.trim()).filter(Boolean).slice(-2):[],note:"",createdAt:Date.now(),updatedAt:Date.now()})})}function getFolderPath(a){let node=a.parentElement;const parts=[];while(node){const prev=node.previousElementSibling;if(prev&&prev.tagName&&prev.tagName.toLowerCase()==="h3")parts.unshift(prev.textContent.trim());node=node.parentElement}return parts.join(" / ")}
+    async function exportJSON(){const data=firebaseConnected?await window.FirebaseBridge.getAllOnce():bookmarks;downloadFile("bookmark-vault-backup.json",JSON.stringify(data,null,2),"application/json")}async function exportChromeHTML(){const data=firebaseConnected?await window.FirebaseBridge.getAllOnce():bookmarks;const work=data.filter(b=>(b.category||"Work")==="Work").sort(sortBookmarks);const personal=data.filter(b=>b.category==="Personal").sort(sortBookmarks);const html=`<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n  <DT><H3>Work</H3>\n  <DL><p>\n${work.map(bookmarkLine).join("\n")}\n  </DL><p>\n  <DT><H3>Personal</H3>\n  <DL><p>\n${personal.map(bookmarkLine).join("\n")}\n  </DL><p>\n</DL><p>`;downloadFile("bookmark-vault-chrome-edge.html",html,"text/html")}function bookmarkLine(b){return`    <DT><A HREF="${escapeHTML(b.url)}">${escapeHTML(b.title)}</A>`}function downloadFirebaseRules(){const rules=`rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /bookmarks/{bookmarkId} {\n      allow read, write: if true;\n    }\n  }\n}\n\n/*\nFor personal use/testing only.\nFor stronger security later, use Firebase Authentication.\n*/`;downloadFile("firestore.rules",rules,"text/plain")}function downloadFile(name,content,type){const blob=new Blob([content],{type});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),700)}
+    if(sessionStorage.getItem("bookmarkVaultUnlocked")==="1"){$("login").classList.add("hidden");$("app").classList.remove("hidden");startApp()}
   </script>
 </body>
 </html>
