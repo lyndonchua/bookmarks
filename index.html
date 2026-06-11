@@ -36,32 +36,32 @@
     window.FirebaseBridge = {
       ready: () => firebaseReady,
 
-      startListening(callback) {
-        if (!firebaseReady) return false;
+      startListening(callback, statusCallback) {
+        if (!firebaseReady) {
+          statusCallback?.("Firebase not ready");
+          return false;
+        }
+
         if (unsubscribe) unsubscribe();
 
         const ref = collection(db, "bookmarks");
 
         const handleSnap = snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          console.log("Firestore bookmarks loaded:", data.length, data);
+          console.log("Firestore READ OK from collection 'bookmarks':", data.length, data);
+          statusCallback?.(`Firebase loaded ${data.length}`);
           callback(data);
         };
 
         const handleErr = err => {
-          console.error("Firestore ordered read error. Trying fallback read:", err);
-          unsubscribe = onSnapshot(ref, handleSnap, fallbackErr => {
-            console.error("Firestore fallback read error:", fallbackErr);
-          });
+          console.error("Firestore READ ERROR:", err);
+          statusCallback?.("Firebase read error: " + (err.code || err.message || err));
         };
 
-        try {
-          const q = query(ref, orderBy("position", "asc"));
-          unsubscribe = onSnapshot(q, handleSnap, handleErr);
-        } catch (err) {
-          console.error("Firestore query setup error. Trying fallback read:", err);
-          unsubscribe = onSnapshot(ref, handleSnap, handleErr);
-        }
+        // IMPORTANT:
+        // Do not use orderBy here. Older records may not have position/updatedAt,
+        // and missing indexes can prevent data from appearing.
+        unsubscribe = onSnapshot(ref, handleSnap, handleErr);
 
         return true;
       },
@@ -130,7 +130,10 @@
           if (item.id && !item.id.startsWith("local_")) {
             batch.set(
               doc(db, "bookmarks", item.id),
-              { position: index, updatedAt: serverTimestamp() },
+              {
+                position: index,
+                updatedAt: serverTimestamp()
+              },
               { merge: true }
             );
           }
@@ -142,15 +145,8 @@
 
       async getAllOnce() {
         if (!firebaseReady) return [];
-        try {
-          const q = query(collection(db, "bookmarks"), orderBy("position", "asc"));
-          const snap = await getDocs(q);
-          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        } catch (err) {
-          console.error("Firestore export fallback:", err);
-          const snap = await getDocs(collection(db, "bookmarks"));
-          return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
+        const snap = await getDocs(collection(db, "bookmarks"));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
       }
     };
   </script>
@@ -186,7 +182,7 @@
     .fav{width:25px;height:25px;border-radius:8px;background:#050b16;display:grid;place-items:center;overflow:hidden;color:var(--accent);font-weight:800;font-size:12px}.fav img{width:100%;height:100%;object-fit:cover}
     .main{min-width:0}.name-line{display:flex;gap:6px;align-items:center;min-width:0}.name{font-weight:750;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;line-height:1.15;min-width:0}.cat{flex:0 0 auto;font-size:10px;color:#bae6fd;border:1px solid rgba(56,189,248,.22);background:rgba(56,189,248,.1);padding:1px 5px;border-radius:999px}.meta{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.actions{display:flex;gap:4px}.mini{font-size:11px;padding:5px 6px;border-radius:8px}
     .empty{text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:28px 14px;margin-top:8px;font-size:13px}.fab{position:fixed;right:15px;bottom:15px;z-index:30;width:46px;height:46px;border-radius:17px;display:grid;place-items:center;font-size:24px;box-shadow:0 12px 35px rgba(0,0,0,.35)}
-    .modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.66);display:grid;place-items:end center;padding:10px}.modal-card{width:min(600px,100%);max-height:86vh;overflow-y:auto;background:#0c1628;border:1px solid rgba(148,163,184,.22);border-radius:20px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.4)}.modal-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.modal-head h2{font-size:17px;margin:0}.grid{display:grid;gap:8px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.url-row{display:grid;grid-template-columns:1fr 86px;gap:6px}.choice-title{color:var(--muted);font-size:12px;margin-top:2px}.choice-row{display:flex;gap:6px;flex-wrap:wrap}.choice-btn{font-size:12px;padding:7px 10px;border-radius:999px}.choice-btn.active{color:#00111f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;font-weight:800}.menu-grid{display:grid;gap:7px}.notice{font-size:12px;color:var(--muted);line-height:1.35;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);padding:9px;border-radius:12px}.small{font-size:12px;color:var(--muted);line-height:1.35}.status{color:#bae6fd;font-size:12px;min-height:16px}
+    .modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.66);display:grid;place-items:end center;padding:10px}.modal-card{width:min(600px,100%);max-height:86vh;overflow-y:auto;background:#0c1628;border:1px solid rgba(148,163,184,.22);border-radius:20px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.4)}.modal-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.modal-head h2{font-size:17px;margin:0}.grid{display:grid;gap:8px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.url-row{display:grid;grid-template-columns:1fr 86px;gap:6px}.choice-title{color:var(--muted);font-size:12px;margin-top:2px}.choice-row{display:flex;gap:6px;flex-wrap:wrap}.choice-btn{font-size:12px;padding:7px 10px;border-radius:999px}.choice-btn.active{color:#00111f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;font-weight:800}.menu-grid{display:grid;gap:7px}.notice{font-size:12px;color:var(--muted);line-height:1.35;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);padding:9px;border-radius:12px}.small{font-size:12px;color:var(--muted);line-height:1.35}.status{color:#bae6fd;font-size:12px;min-height:14px}.top>.status{margin:0 2px 5px;color:#86efac}
     @media(min-width:760px){.list{grid-template-columns:repeat(2,minmax(0,1fr))}.modal{place-items:center}}
     @media(max-width:430px){.app{padding:7px}.row{grid-template-columns:22px 24px 1fr auto;gap:6px}.actions{flex-direction:column}.mini{padding:4px 6px}.two{grid-template-columns:1fr}.url-row{grid-template-columns:1fr 76px}}
   </style>
@@ -194,7 +190,7 @@
 
 <body>
   <section id="login" class="login"><div class="login-card"><div class="logo-row"><div class="logo">B</div><h1>Bookmark Vault</h1></div><div class="login-row"><input id="passInput" type="password" placeholder="Passcode" /><button class="primary" onclick="unlock()">Unlock</button></div><div id="loginMsg" class="status"></div></div></section>
-  <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks shown. If Firestore already has data, open Console and check the Firebase read message.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
+  <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div id="firebaseStatus" class="status">Firebase: checking...</div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks shown. If Firestore already has data, open Console and check the Firebase read message.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
   <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">AI Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
   <section id="menuModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Menu</h2><button onclick="closeMenu()">Close</button></div><div class="menu-grid"><button onclick="openImport()">Import Chrome / Edge / JSON</button><button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button><button onclick="exportJSON()">Export JSON backup</button><button onclick="downloadFirebaseRules()">Download Firestore Rules</button><button class="warn" onclick="lock()">Lock</button><div class="notice">Firebase collection used: <b>bookmarks</b>. Reordering is saved using the <b>position</b> field.</div></div></div></section>
   <section id="importModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Import bookmarks</h2><button onclick="closeImport()">Close</button></div><div class="grid"><input id="importFile" type="file" accept=".html,.htm,.json" /><div class="choice-title">Import as</div><div class="choice-row"><button id="impAuto" class="choice-btn active" onclick="setImportMode('auto')">Auto</button><button id="impWork" class="choice-btn" onclick="setImportMode('Work')">Work</button><button id="impPersonal" class="choice-btn" onclick="setImportMode('Personal')">Personal</button></div><button class="primary" onclick="importBookmarks()">Import</button><div id="importStatus" class="status"></div><div class="small">Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.</div></div></div></section>
@@ -209,17 +205,26 @@
 
       firebaseConnected = window.FirebaseBridge && window.FirebaseBridge.ready();
 
-      if(firebaseConnected){
-        window.FirebaseBridge.startListening(data => {
-          bookmarks = data.map(cleanBookmark);
-          normalisePositions(true);
-          saveLocal();
-          render();
+      if($("firebaseStatus")){
+        $("firebaseStatus").textContent = firebaseConnected ? "Firebase: connecting..." : "Firebase: not connected, using local only";
+      }
 
-          if(bookmarks.length === 0){
-            console.warn("Firebase connected, but no documents were returned from collection: bookmarks");
+      if(firebaseConnected){
+        window.FirebaseBridge.startListening(
+          data => {
+            bookmarks = data.map(cleanBookmark);
+            normalisePositions(false);
+            saveLocal();
+            render();
+
+            if(bookmarks.length === 0){
+              console.warn("Firebase connected, but collection 'bookmarks' returned 0 documents.");
+            }
+          },
+          msg => {
+            if($("firebaseStatus")) $("firebaseStatus").textContent = msg;
           }
-        });
+        );
       } else {
         console.error("FirebaseBridge is not ready. App is using localStorage only.");
       }
@@ -233,18 +238,30 @@
     }
 
     function cleanBookmark(b){
-      const created = toMillis(b.createdAt) || Date.now();
-      const updated = toMillis(b.updatedAt) || created;
-      const rawPosition = Number(b.position);
+      const title =
+        b.title || b.Title || b.name || b.Name || b.bookmarkTitle || "Untitled";
+
+      const url =
+        b.url || b.URL || b.Url || b.href || b.HREF || b.link || b.Link || "";
+
+      const rawCategory =
+        b.category || b.Category || b.type || b.Type || "Work";
+
+      const rawFolder =
+        b.folder || b.Folder || b.topic || b.Topic || b.group || b.Group || "";
+
+      const created = toMillis(b.createdAt || b.CreatedAt || b.created_at) || Date.now();
+      const updated = toMillis(b.updatedAt || b.UpdatedAt || b.updated_at) || created;
+      const rawPosition = Number(b.position ?? b.Position ?? b.order ?? b.Order);
 
       return {
         id: b.id || ("local_" + Date.now() + Math.random()),
-        title: b.title || b.name || "Untitled",
-        url: b.url || b.href || "",
-        category: b.category === "Personal" ? "Personal" : "Work",
-        folder: String(b.folder || "").trim(),
-        tags: Array.isArray(b.tags) ? b.tags : [],
-        note: b.note || b.desc || b.description || "",
+        title: String(title).trim() || "Untitled",
+        url: String(url).trim(),
+        category: String(rawCategory).toLowerCase().includes("personal") ? "Personal" : "Work",
+        folder: String(rawFolder).trim(),
+        tags: Array.isArray(b.tags) ? b.tags : Array.isArray(b.Tags) ? b.Tags : [],
+        note: b.note || b.Note || b.desc || b.description || "",
         position: Number.isFinite(rawPosition) ? rawPosition : Number.MAX_SAFE_INTEGER,
         createdAt: created,
         updatedAt: updated
