@@ -178,6 +178,13 @@
     .main{min-width:0}.name-line{display:flex;gap:6px;align-items:center;min-width:0}.name{font-weight:750;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;line-height:1.15;min-width:0}.cat{flex:0 0 auto;font-size:10px;color:#bae6fd;border:1px solid rgba(56,189,248,.22);background:rgba(56,189,248,.1);padding:1px 5px;border-radius:999px}.meta{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.actions{display:flex;gap:4px}.mini{font-size:11px;padding:5px 6px;border-radius:8px}
     .empty{text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:28px 14px;margin-top:8px;font-size:13px}.fab{position:fixed;right:15px;bottom:15px;z-index:30;width:46px;height:46px;border-radius:17px;display:grid;place-items:center;font-size:24px;box-shadow:0 12px 35px rgba(0,0,0,.35)}
     .modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.66);display:grid;place-items:end center;padding:10px}.modal-card{width:min(600px,100%);max-height:86vh;overflow-y:auto;background:#0c1628;border:1px solid rgba(148,163,184,.22);border-radius:20px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.4)}.modal-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}.modal-head h2{font-size:17px;margin:0}.grid{display:grid;gap:8px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.url-row{display:grid;grid-template-columns:1fr 86px;gap:6px}.choice-title{color:var(--muted);font-size:12px;margin-top:2px}.choice-row{display:flex;gap:6px;flex-wrap:wrap}.choice-btn{font-size:12px;padding:7px 10px;border-radius:999px}.choice-btn.active{color:#00111f;background:linear-gradient(135deg,#38bdf8,#22c55e);border-color:transparent;font-weight:800}.menu-grid{display:grid;gap:7px}.notice{font-size:12px;color:var(--muted);line-height:1.35;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);padding:9px;border-radius:12px}.small{font-size:12px;color:var(--muted);line-height:1.35}.status{color:#bae6fd;font-size:12px;min-height:14px}.top>.status{margin:0 2px 5px;color:#86efac}
+    .tool-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+    .preview-card{display:grid;grid-template-columns:44px 1fr;gap:9px;align-items:start;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.03);border-radius:14px;padding:10px}
+    .preview-img{width:44px;height:44px;border-radius:10px;background:#050b16;object-fit:cover}
+    .preview-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.25}
+    .preview-desc{font-size:12px;color:var(--muted);line-height:1.3;margin-top:3px;max-height:48px;overflow:hidden}
+    .preview-url{font-size:11px;color:#7dd3fc;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:430px){.tool-row{grid-template-columns:1fr}.preview-card{grid-template-columns:36px 1fr}.preview-img{width:36px;height:36px}}
     @media(min-width:760px){.list{grid-template-columns:repeat(2,minmax(0,1fr))}.modal{place-items:center}}
     @media(max-width:430px){.app{padding:7px}.row{grid-template-columns:22px 24px 1fr auto;gap:6px}.actions{flex-direction:column}.mini{padding:4px 6px}.two{grid-template-columns:1fr}.url-row{grid-template-columns:1fr 76px}}
   </style>
@@ -186,12 +193,32 @@
 <body>
   <section id="login" class="login"><div class="login-card"><div class="logo-row"><div class="logo">B</div><h1>Bookmark Vault</h1></div><div class="login-row"><input id="passInput" type="password" placeholder="Passcode" /><button class="primary" onclick="unlock()">Unlock</button></div><div id="loginMsg" class="status"></div></div></section>
   <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div id="firebaseStatus" class="status">Firebase: checking...</div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks shown. If Firestore already has data, open Console and check the Firebase read message.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
-  <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">Auto Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
+  <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" />
+        <div class="tool-row">
+          <button onclick="generateTitleFromURL()">Auto Title</button>
+          <button onclick="previewWebpage()">Preview</button>
+          <button onclick="aiImproveBookmark()">AI Improve</button>
+        </div>
+        <div id="previewCard" class="preview-card hidden">
+          <img id="previewImg" class="preview-img" alt="" />
+          <div>
+            <div id="previewTitle" class="preview-title"></div>
+            <div id="previewDesc" class="preview-desc"></div>
+            <div id="previewUrl" class="preview-url"></div>
+            <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+              <button class="mini" onclick="usePreviewTitle()">Use Title</button>
+              <button class="mini" onclick="usePreviewNote()">Use Note</button>
+            </div>
+          </div>
+        </div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
   <section id="menuModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Menu</h2><button onclick="closeMenu()">Close</button></div><div class="menu-grid"><button onclick="openImport()">Import Chrome / Edge / JSON</button><button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button><button onclick="exportJSON()">Export JSON backup</button><button onclick="downloadFirebaseRules()">Download Firestore Rules</button><button class="warn" onclick="lock()">Lock</button><div class="notice">Firebase collection used: <b>bookmarks</b>. Reordering is saved using the <b>position</b> field.</div></div></div></section>
   <section id="importModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Import bookmarks</h2><button onclick="closeImport()">Close</button></div><div class="grid"><input id="importFile" type="file" accept=".html,.htm,.json" /><div class="choice-title">Import as</div><div class="choice-row"><button id="impAuto" class="choice-btn active" onclick="setImportMode('auto')">Auto</button><button id="impWork" class="choice-btn" onclick="setImportMode('Work')">Work</button><button id="impPersonal" class="choice-btn" onclick="setImportMode('Personal')">Personal</button></div><button class="primary" onclick="importBookmarks()">Import</button><div id="importStatus" class="status"></div><div class="small">Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.</div></div></div></section>
 
   <script>
-    const PASSCODE="876766",LOCAL_STORE="bookmarkVaultCompactLocalV5";let bookmarks=[],activeCategory="All",activeFolder="All",editingId=null,editCategory="Work",editFolder="",importMode="auto",firebaseConnected=false,draggedId=null;const $=id=>document.getElementById(id);
+    const PASSCODE="876766",LOCAL_STORE="bookmarkVaultCompactLocalV5";
+    const OPENROUTER_MODEL="openai/gpt-4o-mini";
+    let bookmarks=[],activeCategory="All",activeFolder="All",editingId=null,editCategory="Work",editFolder="",importMode="auto",firebaseConnected=false,draggedId=null,lastPreview=null;
+    const $=id=>document.getElementById(id);
     function unlock(){if($("passInput").value.trim()!==PASSCODE){$("loginMsg").textContent="Wrong passcode.";return}sessionStorage.setItem("bookmarkVaultUnlocked","1");$("login").classList.add("hidden");$("app").classList.remove("hidden");startApp()}function lock(){sessionStorage.removeItem("bookmarkVaultUnlocked");$("app").classList.add("hidden");$("login").classList.remove("hidden");$("passInput").value="";closeMenu()}$("passInput").addEventListener("keydown",e=>{if(e.key==="Enter")unlock()});
     function startApp(){
       loadLocal();
@@ -287,6 +314,177 @@
       $("editorStatus").textContent = "Title added instantly.";
     }
 
+    async function previewWebpage(){
+      const rawUrl = $("url").value.trim();
+
+      if(!rawUrl){
+        $("editorStatus").textContent = "Enter a URL first.";
+        return;
+      }
+
+      const url = normaliseUrl(rawUrl);
+      $("url").value = url;
+      $("editorStatus").textContent = "Loading preview...";
+
+      const fallbackTitle = titleFromURL(url);
+      const domain = getDomain(url);
+
+      try{
+        const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+        const res = await fetch(proxy);
+
+        if(!res.ok) throw new Error("Preview fetch failed");
+
+        const pageHtml = await res.text();
+        const doc = new DOMParser().parseFromString(pageHtml,"text/html");
+
+        const title = cleanTitle(
+          doc.querySelector('meta[property="og:title"]')?.content ||
+          doc.querySelector('meta[name="twitter:title"]')?.content ||
+          doc.querySelector("title")?.textContent ||
+          fallbackTitle
+        );
+
+        const desc = cleanTitle(
+          doc.querySelector('meta[property="og:description"]')?.content ||
+          doc.querySelector('meta[name="description"]')?.content ||
+          doc.querySelector('meta[name="twitter:description"]')?.content ||
+          ""
+        );
+
+        let img =
+          doc.querySelector('meta[property="og:image"]')?.content ||
+          doc.querySelector('meta[name="twitter:image"]')?.content ||
+          "";
+
+        if(img){
+          try{ img = new URL(img, url).href; }catch(e){}
+        }
+
+        lastPreview = {title,desc,img,url,domain};
+        showPreview(lastPreview);
+
+        if(!$("title").value.trim()) $("title").value = title || fallbackTitle;
+        if(desc && !$("note").value.trim()) $("note").value = desc;
+
+        $("editorStatus").textContent = "Preview loaded.";
+      }catch(e){
+        lastPreview = {
+          title: fallbackTitle,
+          desc: "",
+          img: domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : "",
+          url,
+          domain
+        };
+        showPreview(lastPreview);
+        $("title").value = $("title").value.trim() || fallbackTitle;
+        $("editorStatus").textContent = "Preview blocked. Used URL title.";
+      }
+    }
+
+    function showPreview(preview){
+      $("previewCard").classList.remove("hidden");
+      $("previewTitle").textContent = preview.title || "Untitled";
+      $("previewDesc").textContent = preview.desc || "No description available.";
+      $("previewUrl").textContent = preview.domain || preview.url || "";
+      $("previewImg").src = preview.img || (preview.domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(preview.domain)}&sz=64` : "");
+    }
+
+    function usePreviewTitle(){
+      if(lastPreview?.title){
+        $("title").value = lastPreview.title;
+        $("editorStatus").textContent = "Preview title used.";
+      }
+    }
+
+    function usePreviewNote(){
+      if(lastPreview?.desc){
+        $("note").value = lastPreview.desc;
+        $("editorStatus").textContent = "Preview description used.";
+      }
+    }
+
+    async function aiImproveBookmark(){
+      const rawUrl = $("url").value.trim();
+
+      if(!rawUrl){
+        $("editorStatus").textContent = "Enter a URL first.";
+        return;
+      }
+
+      let key = localStorage.getItem("OPENROUTER_API_KEY") || "";
+
+      if(!key){
+        key = prompt("Paste your OpenRouter API key. It will be saved in this browser only.");
+        if(!key){
+          $("editorStatus").textContent = "AI cancelled.";
+          return;
+        }
+        localStorage.setItem("OPENROUTER_API_KEY", key.trim());
+      }
+
+      const url = normaliseUrl(rawUrl);
+      $("url").value = url;
+      $("editorStatus").textContent = "AI improving...";
+
+      const currentTitle = $("title").value.trim() || titleFromURL(url);
+      const currentNote = $("note").value.trim() || lastPreview?.desc || "";
+      const folders = getFolderStats().map(x=>x.name).concat(["Economics","Hockey","Apps","Admin","PW","AI","Finance","Family","Others"]);
+
+      try{
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions",{
+          method:"POST",
+          headers:{
+            "Authorization":`Bearer ${key.trim()}`,
+            "Content-Type":"application/json",
+            "HTTP-Referer": location.origin,
+            "X-Title": "Bookmark Vault"
+          },
+          body:JSON.stringify({
+            model:OPENROUTER_MODEL,
+            messages:[
+              {
+                role:"system",
+                content:"Return only valid JSON. Improve bookmark metadata. Use short title. category must be Work or Personal. folder should be one of the existing folders if suitable."
+              },
+              {
+                role:"user",
+                content:JSON.stringify({
+                  url,
+                  currentTitle,
+                  currentNote,
+                  existingFolders:[...new Set(folders)]
+                })
+              }
+            ],
+            response_format:{type:"json_object"}
+          })
+        });
+
+        if(!response.ok){
+          throw new Error("OpenRouter error " + response.status);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || "{}";
+        const result = JSON.parse(text);
+
+        if(result.title) $("title").value = String(result.title).trim();
+        if(result.category) setEditCategory(String(result.category).toLowerCase().includes("personal") ? "Personal" : "Work");
+        if(result.folder){
+          setEditFolder(String(result.folder).trim());
+          $("folder").value = String(result.folder).trim();
+        }
+        if(Array.isArray(result.tags)) $("tags").value = result.tags.slice(0,6).join(", ");
+        if(result.note && !$("note").value.trim()) $("note").value = String(result.note).trim();
+
+        $("editorStatus").textContent = "AI improved bookmark.";
+      }catch(e){
+        console.error(e);
+        $("editorStatus").textContent = "AI failed. Auto title still works.";
+      }
+    }
+
     function cleanTitle(title){
       return String(title || "")
         .replace(/\s+/g," ")
@@ -339,8 +537,9 @@
         return "Untitled";
       }
     }
-    async function saveBookmark(){const existing=editingId?bookmarks.find(b=>b.id===editingId):null;const item=cleanBookmark({id:editingId||("local_"+Date.now()),title:$("title").value.trim(),url:normaliseUrl($("url").value),category:editCategory,folder:editFolder.trim()||$("folder").value.trim(),tags:$("tags").value.split(",").map(x=>x.trim()).filter(Boolean),note:$("note").value.trim(),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now(),position:existing?.position??bookmarks.length});if(!item.title||!item.url){$("editorStatus").textContent="Please enter title and URL.";return}if(firebaseConnected){await window.FirebaseBridge.save(item)}else{const exists=bookmarks.some(b=>b.id===item.id);bookmarks=exists?bookmarks.map(b=>b.id===item.id?item:b):[item,...bookmarks];normalisePositions(false);saveLocal()}resetEditor();closeEditor();render()}async function deleteBookmark(id){if(!confirm("Delete this bookmark?"))return;if(firebaseConnected){await window.FirebaseBridge.remove(id)}else{bookmarks=bookmarks.filter(b=>b.id!==id);normalisePositions(false);saveLocal();render()}}
-    function openEditor(id=null){editingId=id;$("editorTitle").textContent=id?"Edit bookmark":"Add bookmark";if(id){const b=bookmarks.find(x=>x.id===id);if(b){$("title").value=b.title||"";$("url").value=b.url||"";setEditCategory(b.category||"Work");setEditFolder(b.folder||"");$("folder").value=b.folder||"";$("tags").value=(b.tags||[]).join(", ");$("note").value=b.note||""}}else resetEditor(false);renderEditorFolders();$("editorModal").classList.remove("hidden")}function closeEditor(){$("editorModal").classList.add("hidden")}function resetEditor(clearId=true){if(clearId)editingId=null;["title","url","folder","tags","note"].forEach(id=>$(id).value="");setEditCategory(activeCategory==="Personal"?"Personal":"Work");setEditFolder(activeFolder!=="All"?activeFolder:"");$("folder").value=editFolder;$("editorStatus").textContent="";renderEditorFolders()}function setEditCategory(value){editCategory=value;$("editCatWork")?.classList.toggle("active",value==="Work");$("editCatPersonal")?.classList.toggle("active",value==="Personal")}function setEditFolder(value){editFolder=value.trim();renderEditorFolders()}function renderEditorFolders(){const wrap=$("editorFolderButtons");if(!wrap)return;const folders=getFolderStats().map(x=>x.name),defaults=["Economics","Hockey","Apps","Admin","PW","AI","Finance","Family","Others"];const all=[...new Set([...folders,...defaults])].filter(Boolean);wrap.innerHTML=all.map(folder=>`<button class="choice-btn ${editFolder===folder?"active":""}" onclick="selectEditorFolder('${escapeJS(folder)}')">${escapeHTML(folder)}</button>`).join("")}function selectEditorFolder(folder){editFolder=folder;$("folder").value=folder;renderEditorFolders()}
+
+        async function saveBookmark(){const existing=editingId?bookmarks.find(b=>b.id===editingId):null;const item=cleanBookmark({id:editingId||("local_"+Date.now()),title:$("title").value.trim(),url:normaliseUrl($("url").value),category:editCategory,folder:editFolder.trim()||$("folder").value.trim(),tags:$("tags").value.split(",").map(x=>x.trim()).filter(Boolean),note:$("note").value.trim(),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now(),position:existing?.position??bookmarks.length});if(!item.title||!item.url){$("editorStatus").textContent="Please enter title and URL.";return}if(firebaseConnected){await window.FirebaseBridge.save(item)}else{const exists=bookmarks.some(b=>b.id===item.id);bookmarks=exists?bookmarks.map(b=>b.id===item.id?item:b):[item,...bookmarks];normalisePositions(false);saveLocal()}resetEditor();closeEditor();render()}async function deleteBookmark(id){if(!confirm("Delete this bookmark?"))return;if(firebaseConnected){await window.FirebaseBridge.remove(id)}else{bookmarks=bookmarks.filter(b=>b.id!==id);normalisePositions(false);saveLocal();render()}}
+    function openEditor(id=null){editingId=id;$("editorTitle").textContent=id?"Edit bookmark":"Add bookmark";if(id){const b=bookmarks.find(x=>x.id===id);if(b){$("title").value=b.title||"";$("url").value=b.url||"";setEditCategory(b.category||"Work");setEditFolder(b.folder||"");$("folder").value=b.folder||"";$("tags").value=(b.tags||[]).join(", ");$("note").value=b.note||""}}else resetEditor(false);renderEditorFolders();$("editorModal").classList.remove("hidden")}function closeEditor(){$("editorModal").classList.add("hidden")}function resetEditor(clearId=true){if(clearId)editingId=null;["title","url","folder","tags","note"].forEach(id=>$(id).value="");setEditCategory(activeCategory==="Personal"?"Personal":"Work");setEditFolder(activeFolder!=="All"?activeFolder:"");$("folder").value=editFolder;$("editorStatus").textContent="";lastPreview=null;$("previewCard")?.classList.add("hidden");renderEditorFolders()}function setEditCategory(value){editCategory=value;$("editCatWork")?.classList.toggle("active",value==="Work");$("editCatPersonal")?.classList.toggle("active",value==="Personal")}function setEditFolder(value){editFolder=value.trim();renderEditorFolders()}function renderEditorFolders(){const wrap=$("editorFolderButtons");if(!wrap)return;const folders=getFolderStats().map(x=>x.name),defaults=["Economics","Hockey","Apps","Admin","PW","AI","Finance","Family","Others"];const all=[...new Set([...folders,...defaults])].filter(Boolean);wrap.innerHTML=all.map(folder=>`<button class="choice-btn ${editFolder===folder?"active":""}" onclick="selectEditorFolder('${escapeJS(folder)}')">${escapeHTML(folder)}</button>`).join("")}function selectEditorFolder(folder){editFolder=folder;$("folder").value=folder;renderEditorFolders()}
     function openMenu(){$("menuModal").classList.remove("hidden")}function closeMenu(){$("menuModal").classList.add("hidden")}function openImport(){closeMenu();$("importModal").classList.remove("hidden")}function closeImport(){$("importModal").classList.add("hidden")}function setCategory(value){activeCategory=value;render()}function setFolder(value){activeFolder=value;render()}
     function getFilteredBookmarks(){const q=$("search").value.toLowerCase().trim();return bookmarks.slice().sort(sortBookmarks).filter(b=>{const hay=[b.title,b.url,b.category,b.folder,b.note,(b.tags||[]).join(" ")].join(" ").toLowerCase();return(activeCategory==="All"||b.category===activeCategory)&&(activeFolder==="All"||b.folder===activeFolder)&&(!q||hay.includes(q))})}function getFolderStats(){const map=new Map();bookmarks.forEach(b=>{const folder=(b.folder||"").trim();if(!folder)return;if(activeCategory!=="All"&&b.category!==activeCategory)return;map.set(folder,(map.get(folder)||0)+1)});return[...map.entries()].map(([name,count])=>({name,count})).sort((a,b)=>a.name.localeCompare(b.name))}function renderCategoryButtons(){const counts={All:bookmarks.length,Work:bookmarks.filter(b=>b.category==="Work").length,Personal:bookmarks.filter(b=>b.category==="Personal").length};$("categoryButtons").innerHTML=["All","Work","Personal"].map(cat=>`<button class="filter-btn ${activeCategory===cat?"active":""}" onclick="setCategory('${cat}')">${cat} ${counts[cat]}</button>`).join("")}function renderFolderButtons(){const folders=getFolderStats();const total=activeCategory==="All"?bookmarks.length:bookmarks.filter(b=>b.category===activeCategory).length;const buttons=[`<button class="folder-btn ${activeFolder==="All"?"active":""}" onclick="setFolder('All')">All Folders ${total}</button>`,...folders.map(f=>`<button class="folder-btn ${activeFolder===f.name?"active":""}" onclick="setFolder('${escapeJS(f.name)}')">${escapeHTML(f.name)} ${f.count}</button>`)];$("folderButtons").innerHTML=buttons.join("")}
     function render(){renderCategoryButtons();renderFolderButtons();const data=getFilteredBookmarks();$("count").innerHTML=`<span>${data.length} bookmark${data.length===1?"":"s"}</span><span class="drag-note">Drag ☰ to reorder</span>`;$("empty").classList.toggle("hidden",data.length>0);$("list").innerHTML=data.map(b=>{const domain=getDomain(b.url);const fav=domain?`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`:"";return`<article class="row" draggable="true" data-id="${escapeHTML(b.id)}"><div class="drag" title="Drag to reorder">☰</div><div class="fav">${fav?`<img src="${fav}" onerror="this.remove()">`:escapeHTML((b.title||"B")[0])}</div><div class="main"><div class="name-line"><a class="name" href="${escapeHTML(b.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(b.title)}</a><span class="cat">${escapeHTML(b.category)}</span></div><div class="meta">${escapeHTML(domain||b.url)}${b.folder?" · "+escapeHTML(b.folder):""}</div></div><div class="actions"><button class="mini" onclick="openEditor('${escapeJS(b.id)}')">Edit</button><button class="mini danger" onclick="deleteBookmark('${escapeJS(b.id)}')">Del</button></div></article>`}).join("");setupDragAndDrop();renderEditorFolders()}
