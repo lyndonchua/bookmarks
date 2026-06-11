@@ -5,13 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Bookmark Vault</title>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import {
-      getFirestore, collection, addDoc, setDoc, doc, deleteDoc,
-      onSnapshot, serverTimestamp, getDocs, writeBatch, query, orderBy
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAWVDx3VOJKFU66p3oZnPiwiqeV2HiFkow",
       authDomain: "bookmarks-970c3.firebaseapp.com",
@@ -26,29 +23,28 @@
     let firebaseReady = false;
 
     try {
-      const app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
       firebaseReady = true;
+      console.log("Firebase initialized successfully.");
     } catch (err) {
-      console.error(err);
+      console.error("Firebase initialization failed:", err);
     }
 
     window.FirebaseBridge = {
       ready: () => firebaseReady,
 
       startListening(callback, statusCallback) {
-        if (!firebaseReady) {
+        if (!firebaseReady || !db) {
           statusCallback?.("Firebase not ready");
           return false;
         }
 
         if (unsubscribe) unsubscribe();
 
-        const ref = collection(db, "bookmarks");
-
         const handleSnap = snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          console.log("Firestore READ OK from collection 'bookmarks':", data.length, data);
+          console.log("Firestore READ OK from collection bookmarks:", data.length, data);
           statusCallback?.(`Firebase loaded ${data.length}`);
           callback(data);
         };
@@ -58,16 +54,12 @@
           statusCallback?.("Firebase read error: " + (err.code || err.message || err));
         };
 
-        // IMPORTANT:
-        // Do not use orderBy here. Older records may not have position/updatedAt,
-        // and missing indexes can prevent data from appearing.
-        unsubscribe = onSnapshot(ref, handleSnap, handleErr);
-
+        unsubscribe = db.collection("bookmarks").onSnapshot(handleSnap, handleErr);
         return true;
       },
 
       async save(bookmark) {
-        if (!firebaseReady) return false;
+        if (!firebaseReady || !db) return false;
 
         const payload = {
           title: bookmark.title || "",
@@ -77,33 +69,34 @@
           tags: bookmark.tags || [],
           note: bookmark.note || "",
           position: typeof bookmark.position === "number" ? bookmark.position : Date.now(),
-          createdAt: bookmark.createdAt || serverTimestamp(),
-          updatedAt: serverTimestamp()
+          createdAt: bookmark.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         if (bookmark.id && !bookmark.id.startsWith("local_")) {
-          await setDoc(doc(db, "bookmarks", bookmark.id), payload, { merge: true });
+          await db.collection("bookmarks").doc(bookmark.id).set(payload, { merge: true });
         } else {
-          await addDoc(collection(db, "bookmarks"), payload);
+          await db.collection("bookmarks").add(payload);
         }
 
         return true;
       },
 
       async remove(id) {
-        if (!firebaseReady || id.startsWith("local_")) return false;
-        await deleteDoc(doc(db, "bookmarks", id));
+        if (!firebaseReady || !db || id.startsWith("local_")) return false;
+        await db.collection("bookmarks").doc(id).delete();
         return true;
       },
 
       async importMany(items) {
-        if (!firebaseReady) return false;
+        if (!firebaseReady || !db) return false;
 
-        const batch = writeBatch(db);
+        const batch = db.batch();
         const base = Date.now();
 
         items.forEach((item, index) => {
-          const ref = doc(collection(db, "bookmarks"));
+          const ref = db.collection("bookmarks").doc();
+
           batch.set(ref, {
             title: item.title || "",
             url: item.url || "",
@@ -112,8 +105,8 @@
             tags: item.tags || [],
             note: item.note || "",
             position: base + index,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           });
         });
 
@@ -122,17 +115,19 @@
       },
 
       async updatePositions(items) {
-        if (!firebaseReady) return false;
+        if (!firebaseReady || !db) return false;
 
-        const batch = writeBatch(db);
+        const batch = db.batch();
 
         items.forEach((item, index) => {
           if (item.id && !item.id.startsWith("local_")) {
+            const ref = db.collection("bookmarks").doc(item.id);
+
             batch.set(
-              doc(db, "bookmarks", item.id),
+              ref,
               {
                 position: index,
-                updatedAt: serverTimestamp()
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
               },
               { merge: true }
             );
@@ -144,8 +139,8 @@
       },
 
       async getAllOnce() {
-        if (!firebaseReady) return [];
-        const snap = await getDocs(collection(db, "bookmarks"));
+        if (!firebaseReady || !db) return [];
+        const snap = await db.collection("bookmarks").get();
         return snap.docs.map(d => ({ id: d.id, ...d.data() }));
       }
     };
@@ -206,7 +201,7 @@
       firebaseConnected = window.FirebaseBridge && window.FirebaseBridge.ready();
 
       if($("firebaseStatus")){
-        $("firebaseStatus").textContent = firebaseConnected ? "Firebase: connecting..." : "Firebase: not connected, using local only";
+        $("firebaseStatus").textContent = firebaseConnected ? "Firebase: connecting..." : "Firebase: not connected";
       }
 
       if(firebaseConnected){
