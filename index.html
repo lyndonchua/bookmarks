@@ -186,7 +186,7 @@
 <body>
   <section id="login" class="login"><div class="login-card"><div class="logo-row"><div class="logo">B</div><h1>Bookmark Vault</h1></div><div class="login-row"><input id="passInput" type="password" placeholder="Passcode" /><button class="primary" onclick="unlock()">Unlock</button></div><div id="loginMsg" class="status"></div></div></section>
   <main id="app" class="app hidden"><div class="top"><div class="top-line"><h1>Bookmark Vault</h1><button class="menu-btn" onclick="openMenu()">☰</button></div><div id="firebaseStatus" class="status">Firebase: checking...</div><div class="search-row"><input id="search" placeholder="Search..." oninput="render()" /></div><div id="categoryButtons" class="button-row"></div><div id="folderButtons" class="button-row"></div></div><section class="content"><div id="count" class="count"><span>0 bookmarks</span><span class="drag-note">Drag ☰ to reorder</span></div><div id="list" class="list"></div><div id="empty" class="empty hidden">No bookmarks shown. If Firestore already has data, open Console and check the Firebase read message.</div></section><button class="fab primary" onclick="openEditor()">+</button></main>
-  <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">AI Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
+  <section id="editorModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2 id="editorTitle">Add bookmark</h2><button onclick="closeEditor()">Close</button></div><div class="grid"><input id="title" placeholder="Title" /><div class="url-row"><input id="url" placeholder="URL" onblur="autoTitleIfEmpty()" /><button onclick="generateTitleFromURL()">Auto Title</button></div><div><div class="choice-title">Category</div><div class="choice-row"><button id="editCatWork" class="choice-btn active" onclick="setEditCategory('Work')">Work</button><button id="editCatPersonal" class="choice-btn" onclick="setEditCategory('Personal')">Personal</button></div></div><div><div class="choice-title">Folder</div><div id="editorFolderButtons" class="choice-row"></div></div><input id="folder" placeholder="New folder / topic" oninput="setEditFolder(this.value)" /><input id="tags" placeholder="Tags, comma separated" /><input id="note" placeholder="Short note" /><div class="two"><button class="primary" onclick="saveBookmark()">Save</button><button onclick="resetEditor()">Reset</button></div><div id="editorStatus" class="status"></div></div></div></section>
   <section id="menuModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Menu</h2><button onclick="closeMenu()">Close</button></div><div class="menu-grid"><button onclick="openImport()">Import Chrome / Edge / JSON</button><button onclick="exportChromeHTML()">Export Chrome / Edge HTML</button><button onclick="exportJSON()">Export JSON backup</button><button onclick="downloadFirebaseRules()">Download Firestore Rules</button><button class="warn" onclick="lock()">Lock</button><div class="notice">Firebase collection used: <b>bookmarks</b>. Reordering is saved using the <b>position</b> field.</div></div></div></section>
   <section id="importModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h2>Import bookmarks</h2><button onclick="closeImport()">Close</button></div><div class="grid"><input id="importFile" type="file" accept=".html,.htm,.json" /><div class="choice-title">Import as</div><div class="choice-row"><button id="impAuto" class="choice-btn active" onclick="setImportMode('auto')">Auto</button><button id="impWork" class="choice-btn" onclick="setImportMode('Work')">Work</button><button id="impPersonal" class="choice-btn" onclick="setImportMode('Personal')">Personal</button></div><button class="primary" onclick="importBookmarks()">Import</button><div id="importStatus" class="status"></div><div class="small">Chrome/Edge: Bookmark Manager → Export bookmarks → import the HTML file here.</div></div></div></section>
 
@@ -263,7 +263,82 @@
       };
     }
     function loadLocal(){try{bookmarks=JSON.parse(localStorage.getItem(LOCAL_STORE)||"[]").map(cleanBookmark)}catch(e){bookmarks=[]}}function saveLocal(){localStorage.setItem(LOCAL_STORE,JSON.stringify(bookmarks))}function normalisePositions(save=true){bookmarks.sort(sortBookmarks);let changed=false;bookmarks.forEach((b,i)=>{if(typeof b.position!=="number"||b.position===Number.MAX_SAFE_INTEGER){b.position=i;changed=true}});if(changed&&save)persistPositions(bookmarks)}function sortBookmarks(a,b){const ap=typeof a.position==="number"?a.position:Number.MAX_SAFE_INTEGER,bp=typeof b.position==="number"?b.position:Number.MAX_SAFE_INTEGER;if(ap!==bp)return ap-bp;const au=typeof a.updatedAt==="number"?a.updatedAt:0,bu=typeof b.updatedAt==="number"?b.updatedAt:0;return bu-au}
-    function normaliseUrl(url){url=(url||"").trim();if(!url)return"";if(!/^https?:\/\//i.test(url))url="https://"+url;return url}async function autoTitleIfEmpty(){if(!$("title").value.trim()&&$("url").value.trim())await generateTitleFromURL()}async function generateTitleFromURL(){const rawUrl=$("url").value.trim();if(!rawUrl){$("editorStatus").textContent="Enter a URL first.";return}const url=normaliseUrl(rawUrl);$("url").value=url;$("editorStatus").textContent="Getting title...";const fallbackTitle=titleFromURL(url);try{const proxy="https://api.allorigins.win/raw?url="+encodeURIComponent(url);const res=await fetch(proxy);if(!res.ok)throw new Error("Fetch failed");const html=await res.text();const doc=new DOMParser().parseFromString(html,"text/html");let title=doc.querySelector('meta[property="og:title"]')?.content||doc.querySelector('meta[name="twitter:title"]')?.content||doc.querySelector("title")?.textContent||fallbackTitle;title=cleanTitle(title);$("title").value=title||fallbackTitle;$("editorStatus").textContent="Title added."}catch(e){$("title").value=fallbackTitle;$("editorStatus").textContent="Could not access page title. Used URL title instead."}}function cleanTitle(title){return String(title||"").replace(/\s+/g," ").replace(/\|.*$/," ").replace(/ - YouTube$/i,"").replace(/ - Google Search$/i,"").trim()}function titleFromURL(url){try{const u=new URL(url);let path=u.pathname.split("/").filter(Boolean).pop()||u.hostname;path=decodeURIComponent(path).replace(/\.[a-z0-9]+$/i,"").replace(/[-_]+/g," ").replace(/\s+/g," ").trim();if(!path||path===u.hostname)return u.hostname.replace(/^www\./,"");return path.replace(/\b\w/g,c=>c.toUpperCase())}catch(e){return"Untitled"}}
+    function normaliseUrl(url){url=(url||"").trim();if(!url)return"";if(!/^https?:\/\//i.test(url))url="https://"+url;return url}
+
+    async function autoTitleIfEmpty(){
+      if(!$("title").value.trim() && $("url").value.trim()){
+        generateTitleFromURL();
+      }
+    }
+
+    function generateTitleFromURL(){
+      const rawUrl = $("url").value.trim();
+
+      if(!rawUrl){
+        $("editorStatus").textContent = "Enter a URL first.";
+        return;
+      }
+
+      const url = normaliseUrl(rawUrl);
+      $("url").value = url;
+
+      const title = titleFromURL(url);
+      $("title").value = title;
+      $("editorStatus").textContent = "Title added instantly.";
+    }
+
+    function cleanTitle(title){
+      return String(title || "")
+        .replace(/\s+/g," ")
+        .replace(/\|.*$/,"")
+        .replace(/ - YouTube$/i,"")
+        .replace(/ - Google Search$/i,"")
+        .trim();
+    }
+
+    function titleFromURL(url){
+      try{
+        const u = new URL(url);
+        const host = u.hostname.replace(/^www\./,"");
+
+        const known = {
+          "chatgpt.com":"ChatGPT",
+          "docs.google.com":"Google Docs",
+          "drive.google.com":"Google Drive",
+          "classroom.google.com":"Google Classroom",
+          "mail.google.com":"Gmail",
+          "github.com":"GitHub",
+          "vercel.com":"Vercel",
+          "firebase.google.com":"Firebase",
+          "console.firebase.google.com":"Firebase Console",
+          "youtube.com":"YouTube",
+          "youtu.be":"YouTube"
+        };
+
+        if(known[host]) return known[host];
+
+        const parts = u.pathname
+          .split("/")
+          .filter(Boolean)
+          .filter(x => !/^[a-zA-Z0-9_-]{12,}$/.test(x));
+
+        let candidate = parts.length ? parts[parts.length - 1] : host;
+
+        candidate = decodeURIComponent(candidate)
+          .replace(/\.[a-z0-9]+$/i,"")
+          .replace(/[-_]+/g," ")
+          .replace(/\s+/g," ")
+          .trim();
+
+        if(!candidate || candidate.length < 3){
+          candidate = host.split(".")[0];
+        }
+
+        return candidate.replace(/\b\w/g, c => c.toUpperCase());
+      }catch(e){
+        return "Untitled";
+      }
+    }
     async function saveBookmark(){const existing=editingId?bookmarks.find(b=>b.id===editingId):null;const item=cleanBookmark({id:editingId||("local_"+Date.now()),title:$("title").value.trim(),url:normaliseUrl($("url").value),category:editCategory,folder:editFolder.trim()||$("folder").value.trim(),tags:$("tags").value.split(",").map(x=>x.trim()).filter(Boolean),note:$("note").value.trim(),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now(),position:existing?.position??bookmarks.length});if(!item.title||!item.url){$("editorStatus").textContent="Please enter title and URL.";return}if(firebaseConnected){await window.FirebaseBridge.save(item)}else{const exists=bookmarks.some(b=>b.id===item.id);bookmarks=exists?bookmarks.map(b=>b.id===item.id?item:b):[item,...bookmarks];normalisePositions(false);saveLocal()}resetEditor();closeEditor();render()}async function deleteBookmark(id){if(!confirm("Delete this bookmark?"))return;if(firebaseConnected){await window.FirebaseBridge.remove(id)}else{bookmarks=bookmarks.filter(b=>b.id!==id);normalisePositions(false);saveLocal();render()}}
     function openEditor(id=null){editingId=id;$("editorTitle").textContent=id?"Edit bookmark":"Add bookmark";if(id){const b=bookmarks.find(x=>x.id===id);if(b){$("title").value=b.title||"";$("url").value=b.url||"";setEditCategory(b.category||"Work");setEditFolder(b.folder||"");$("folder").value=b.folder||"";$("tags").value=(b.tags||[]).join(", ");$("note").value=b.note||""}}else resetEditor(false);renderEditorFolders();$("editorModal").classList.remove("hidden")}function closeEditor(){$("editorModal").classList.add("hidden")}function resetEditor(clearId=true){if(clearId)editingId=null;["title","url","folder","tags","note"].forEach(id=>$(id).value="");setEditCategory(activeCategory==="Personal"?"Personal":"Work");setEditFolder(activeFolder!=="All"?activeFolder:"");$("folder").value=editFolder;$("editorStatus").textContent="";renderEditorFolders()}function setEditCategory(value){editCategory=value;$("editCatWork")?.classList.toggle("active",value==="Work");$("editCatPersonal")?.classList.toggle("active",value==="Personal")}function setEditFolder(value){editFolder=value.trim();renderEditorFolders()}function renderEditorFolders(){const wrap=$("editorFolderButtons");if(!wrap)return;const folders=getFolderStats().map(x=>x.name),defaults=["Economics","Hockey","Apps","Admin","PW","AI","Finance","Family","Others"];const all=[...new Set([...folders,...defaults])].filter(Boolean);wrap.innerHTML=all.map(folder=>`<button class="choice-btn ${editFolder===folder?"active":""}" onclick="selectEditorFolder('${escapeJS(folder)}')">${escapeHTML(folder)}</button>`).join("")}function selectEditorFolder(folder){editFolder=folder;$("folder").value=folder;renderEditorFolders()}
     function openMenu(){$("menuModal").classList.remove("hidden")}function closeMenu(){$("menuModal").classList.add("hidden")}function openImport(){closeMenu();$("importModal").classList.remove("hidden")}function closeImport(){$("importModal").classList.add("hidden")}function setCategory(value){activeCategory=value;render()}function setFolder(value){activeFolder=value;render()}
